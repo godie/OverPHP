@@ -1,0 +1,37 @@
+# Composer
+/vendor/
+composer.lock
+
+# Configuration (contains credentials)
+config.php
+
+# Environment
+.env
+
+# IDE / Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# PHPUnit
+.phpunit.result.cache
+.phpunit.cache/
+
+# Coverage reports
+/coverage/
+clover.xml
+coverage.xml
+
+# SQLite databases
+/database/*.sqlite
+/database/*.sqlite-wal
+/database/*.sqlite-shm
+
+# Logs
+*.log
