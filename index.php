@@ -27,6 +27,7 @@ spl_autoload_register(function (string $class): void {
 
 Benchmark::start((bool) ($config['benchmark']['enabled'] ?? false));
 Security::sendSecurityHeaders();
+Security::setCsrfEnabled((bool) ($config['security']['csrf_enabled'] ?? true));
 
 if (corsSendHeaders($config['allowed_origins'] ?? [])) {
     exit;

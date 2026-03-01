@@ -41,7 +41,7 @@ final class Router
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
         // CSRF Protection for state-changing methods
-        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+        if (Security::isCsrfEnabled() && in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
             $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['_csrf_token'] ?? null;
             if (!Security::validateCsrfToken($token)) {
                 http_response_code(403);

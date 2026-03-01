@@ -44,4 +44,13 @@ final class SecurityTest extends TestCase
         $json = Security::jsonEncode($data);
         $this->assertStringContainsString('\u003Cscript\u003E', $json);
     }
+
+    public function testCsrfEnabledDisabled(): void
+    {
+        Security::setCsrfEnabled(true);
+        $this->assertTrue(Security::isCsrfEnabled());
+        Security::setCsrfEnabled(false);
+        $this->assertFalse(Security::isCsrfEnabled());
+        Security::setCsrfEnabled(true); // reset
+    }
 }

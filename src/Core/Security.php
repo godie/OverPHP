@@ -12,6 +12,24 @@ final class Security
 {
     private const CSRF_TOKEN_NAME = '_csrf_token';
 
+    private static bool $csrfEnabled = true;
+
+    /**
+     * Set whether CSRF protection is enabled.
+     */
+    public static function setCsrfEnabled(bool $enabled): void
+    {
+        self::$csrfEnabled = $enabled;
+    }
+
+    /**
+     * Check if CSRF protection is enabled.
+     */
+    public static function isCsrfEnabled(): bool
+    {
+        return self::$csrfEnabled;
+    }
+
     /**
      * Start a secure session if not already started.
      */

@@ -43,10 +43,26 @@ OverPHP is a minimal API-first PHP framework. The overall security posture has b
 
 ## New Security Module: `OverPHP\Core\Security`
 A central security class was added to the framework core, providing:
-- **CSRF Token Management**: `generateCsrfToken()`, `validateCsrfToken($token)`
+- **CSRF Token Management**: `generateCsrfToken()`, `validateCsrfToken($token)`, `setCsrfEnabled($bool)`, `isCsrfEnabled()`
 - **Secure Sessions**: `startSecureSession()`, `regenerateSessionId()`
 - **Security Headers**: `sendSecurityHeaders()`
 - **Output Sanitization**: `escape($data)` (for HTML), `jsonEncode($data)` (for JSON)
+
+## Stateless (Token-based) vs Stateful (Cookie-based) Security
+
+OverPHP now supports both security models for APIs:
+
+### 1. Stateful (Session-based)
+Ideal for web applications where the frontend and backend share the same domain or are closely coupled.
+- **How to configure**: Set `'security' => ['csrf_enabled' => true]` in `config.php`.
+- **How it works**: Uses PHP sessions and cookies. CSRF protection is **mandatory** and automatically enforced by the `Router` for POST, PUT, PATCH, and DELETE requests.
+- **Developer action**: Must include the CSRF token in requests (e.g., via the `X-CSRF-Token` header).
+
+### 2. Stateless (Token-based / JWT)
+Ideal for pure REST or GraphQL APIs consumed by diverse clients (mobile apps, external web apps).
+- **How to configure**: Set `'security' => ['csrf_enabled' => false]` in `config.php`.
+- **How it works**: No sessions or cookies are used for authentication. Authentication is typically handled via an `Authorization: Bearer <token>` header.
+- **CSRF**: Not required as browsers do not automatically send custom headers for cross-site requests.
 
 ## General Recommendations for Future Development
 1. **Developer Education**: Ensure developers building on OverPHP are aware of the new security features and how to use them (e.g., using `Security::generateCsrfToken()` when rendering forms).
