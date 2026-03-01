@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use OverPHP\Core\Benchmark;
 use OverPHP\Core\Router;
+use OverPHP\Core\Security;
 use function OverPHP\Helpers\corsSendHeaders;
 
 $config = require __DIR__ . '/config.php';
@@ -25,6 +26,7 @@ spl_autoload_register(function (string $class): void {
 });
 
 Benchmark::start((bool) ($config['benchmark']['enabled'] ?? false));
+Security::sendSecurityHeaders();
 
 if (corsSendHeaders($config['allowed_origins'] ?? [])) {
     exit;

@@ -31,9 +31,29 @@ final class Router
     public function run(): void
     {
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
-        $uri = str_replace($this->prefix, '', $uri);
+
+        // Strip prefix from the beginning of URI only
+        if ($this->prefix !== '' && str_starts_with($uri, $this->prefix)) {
+            $uri = substr($uri, strlen($this->prefix));
+        }
+
         $uri = explode('?', $uri)[0];
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
+        // CSRF Protection for state-changing methods
+        if (in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['_csrf_token'] ?? null;
+            if (!Security::validateCsrfToken($token)) {
+                http_response_code(403);
+                header('Content-Type: application/json; charset=utf-8');
+                try {
+                    echo Security::jsonEncode(['success' => false, 'error' => 'Invalid CSRF token']);
+                } catch (\JsonException $e) {
+                    echo json_encode(['success' => false, 'error' => 'Invalid CSRF token']);
+                }
+                return;
+            }
+        }
 
         foreach ($this->routes as $route) {
             if ($route['path'] !== $uri || $route['method'] !== $method) {
@@ -92,12 +112,17 @@ final class Router
                 $output['_performance'] = $stats;
             }
 
-            echo json_encode($output);
+            try {
+                echo Security::jsonEncode($output);
+            } catch (\JsonException $e) {
+                http_response_code(500);
+                echo json_encode(['success' => false, 'error' => 'Internal Server Error']);
+            }
             return;
         }
 
         if (is_string($response)) {
-            echo $response;
+            echo Security::escape($response);
         }
     }
 }
