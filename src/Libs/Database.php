@@ -80,8 +80,15 @@ final class Database
             self::$connection = $driver->connect($driverConfig);
             self::$lastError = null;
             return self::$connection;
+        } catch (\PDOException $e) {
+            // Only store a generic message for potential display, log the real one
+            self::$lastError = 'Database connection failed. Please check your configuration and logs.';
+            error_log('Database Connection Error: ' . $e->getMessage());
+            self::$connection = null;
+            return null;
         } catch (\Throwable $e) {
-            self::$lastError = $e->getMessage();
+            self::$lastError = 'An unexpected error occurred in the database layer.';
+            error_log('Unexpected Database Error: ' . $e->getMessage());
             self::$connection = null;
             return null;
         }
