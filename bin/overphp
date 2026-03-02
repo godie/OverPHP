@@ -1,0 +1,92 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+$command = $argv[1] ?? null;
+
+if ($command === 'new') {
+    $projectName = $argv[2] ?? null;
+    if (!$projectName) {
+        echo "Usage: overphp new <project-name>\n";
+        exit(1);
+    }
+
+    if (is_dir($projectName)) {
+        echo "Error: Directory '$projectName' already exists.\n";
+        exit(1);
+    }
+
+    echo "Creating new OverPHP project: $projectName...\n";
+
+    mkdir($projectName, 0755, true);
+    mkdir("$projectName/src/Controllers", 0755, true);
+    mkdir("$projectName/src/Core", 0755, true);
+    mkdir("$projectName/src/Helpers", 0755, true);
+    mkdir("$projectName/src/Libs/Drivers", 0755, true);
+    mkdir("$projectName/tests", 0755, true);
+    mkdir("$projectName/client", 0755, true);
+
+    // Get the source directory of the framework
+    $frameworkDir = dirname(__DIR__);
+
+    // Copy files
+    copy("$frameworkDir/index.php", "$projectName/index.php");
+    copy("$frameworkDir/config.example.php", "$projectName/config.php");
+    copy("$frameworkDir/.gitignore", "$projectName/.gitignore");
+
+    // Copy src and tests
+    $filesToCopy = [
+        'src/Controllers/HelloController.php',
+        'src/Core/Benchmark.php',
+        'src/Core/Router.php',
+        'src/Core/Security.php',
+        'src/Helpers/cors.php',
+        'src/Helpers/database.php',
+        'src/Libs/Database.php',
+        'src/Libs/Drivers/AbstractDriver.php',
+        'src/Libs/Drivers/DriverInterface.php',
+        'src/Libs/Drivers/MysqlDriver.php',
+        'src/Libs/Drivers/SqliteDriver.php',
+    ];
+
+    foreach ($filesToCopy as $file) {
+        if (file_exists("$frameworkDir/$file")) {
+            copy("$frameworkDir/$file", "$projectName/$file");
+        }
+    }
+
+    // Create a basic index.html for the client
+    file_put_contents("$projectName/client/index.html", "<h1>Welcome to OverPHP</h1>\n<p>Your client folder is ready.</p>\n");
+
+    // Create a basic composer.json for the new project
+    $composerData = [
+        "name" => "app/" . strtolower($projectName),
+        "description" => "OverPHP project",
+        "type" => "project",
+        "require" => [
+            "php" => "^8.1"
+        ],
+        "autoload" => [
+            "psr-4" => [
+                "OverPHP\\" => "src/"
+            ],
+            "files" => [
+                "src/Helpers/cors.php",
+                "src/Helpers/database.php"
+            ]
+        ]
+    ];
+    file_put_contents("$projectName/composer.json", json_encode($composerData, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+    echo "Project '$projectName' created successfully!\n";
+    echo "Next steps:\n";
+    echo "1. cd $projectName\n";
+    echo "2. composer install\n";
+    echo "3. php -S localhost:8000 index.php\n";
+} else {
+    echo "OverPHP CLI Tool\n";
+    echo "Usage: overphp <command> [options]\n";
+    echo "Commands:\n";
+    echo "  new <project-name>    Create a new OverPHP project\n";
+}

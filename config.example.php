@@ -10,6 +10,12 @@ return [
     'benchmark' => [
         'enabled' => filter_var(getenv('BENCHMARK_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN),
     ],
+    // ─── Client ───────────────────────────────────────────────────
+    'client' => [
+        'enabled' => filter_var(getenv('CLIENT_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN),
+        'path' => getenv('CLIENT_PATH') ?: __DIR__ . '/client',
+        'fallback_index' => 'index.html',
+    ],
     // ─── Security ─────────────────────────────────────────────────
     'security' => [
         // Set to true if using sessions/cookies for authentication.
