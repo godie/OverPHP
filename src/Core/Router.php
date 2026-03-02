@@ -11,11 +11,24 @@ final class Router
 
     private string $controllerNamespace;
     private string $prefix;
+    /** @var array{enabled:bool,path:string,fallback_index:string} */
+    private array $clientConfig;
 
-    public function __construct(string $controllerNamespace = 'OverPHP\\Controllers', string $prefix = '/api')
-    {
+    /**
+     * @param array{enabled?:bool,path?:string,fallback_index?:string} $clientConfig
+     */
+    public function __construct(
+        string $controllerNamespace = 'OverPHP\\Controllers',
+        string $prefix = '/api',
+        array $clientConfig = []
+    ) {
         $this->controllerNamespace = $controllerNamespace;
         $this->prefix = $prefix;
+        $this->clientConfig = array_merge([
+            'enabled' => false,
+            'path' => '',
+            'fallback_index' => 'index.html',
+        ], $clientConfig);
     }
 
     /** @param callable|string $handler */
@@ -31,14 +44,21 @@ final class Router
     public function run(): void
     {
         $uri = $_SERVER['REQUEST_URI'] ?? '/';
+        $uri = explode('?', $uri)[0];
+        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
+        // 1. Try to serve client static files if enabled and prefix doesn't match
+        if ($this->clientConfig['enabled'] && !str_starts_with($uri, $this->prefix)) {
+            if ($this->serveClient($uri)) {
+                return;
+            }
+        }
+
+        // 2. Handle API routes
         // Strip prefix from the beginning of URI only
         if ($this->prefix !== '' && str_starts_with($uri, $this->prefix)) {
             $uri = substr($uri, strlen($this->prefix));
         }
-
-        $uri = explode('?', $uri)[0];
-        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
         // CSRF Protection for state-changing methods
         if (Security::isCsrfEnabled() && in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
@@ -90,6 +110,61 @@ final class Router
         http_response_code(404);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['success' => false, 'error' => 'Not Found']);
+    }
+
+    private function serveClient(string $uri): bool
+    {
+        $clientPath = rtrim($this->clientConfig['path'], '/');
+        if ($clientPath === '' || !is_dir($clientPath)) {
+            return false;
+        }
+
+        $filePath = $clientPath . $uri;
+
+        // If it's a directory, try to find index.html
+        if (is_dir($filePath)) {
+            $filePath = rtrim($filePath, '/') . '/' . $this->clientConfig['fallback_index'];
+        }
+
+        // Security check: Prevent directory traversal
+        $realClientPath = realpath($clientPath);
+        $realFilePath = realpath($filePath);
+
+        if ($realFilePath && $realClientPath && str_starts_with($realFilePath, $realClientPath) && is_file($realFilePath)) {
+            $this->serveFile($realFilePath);
+            return true;
+        }
+
+        // SPA Fallback: if file doesn't exist, serve fallback_index
+        $fallbackPath = $clientPath . '/' . $this->clientConfig['fallback_index'];
+        $realFallbackPath = realpath($fallbackPath);
+        if ($realFallbackPath && is_file($realFallbackPath)) {
+            $this->serveFile($realFallbackPath);
+            return true;
+        }
+
+        return false;
+    }
+
+    private function serveFile(string $filePath): void
+    {
+        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+        $mimeTypes = [
+            'html' => 'text/html',
+            'css'  => 'text/css',
+            'js'   => 'application/javascript',
+            'json' => 'application/json',
+            'png'  => 'image/png',
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'gif'  => 'image/gif',
+            'svg'  => 'image/svg+xml',
+            'ico'  => 'image/x-icon',
+        ];
+
+        $contentType = $mimeTypes[$extension] ?? 'application/octet-stream';
+        header('Content-Type: ' . $contentType);
+        readfile($filePath);
     }
 
     private function resolveControllerFqn(string $controller): string
