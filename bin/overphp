@@ -39,6 +39,8 @@ if ($command === 'new') {
     $filesToCopy = [
         'src/Controllers/HelloController.php',
         'src/Core/Benchmark.php',
+        'src/Core/Container.php',
+        'src/Core/Response.php',
         'src/Core/Router.php',
         'src/Core/Security.php',
         'src/Helpers/cors.php',

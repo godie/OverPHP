@@ -52,6 +52,7 @@ $clientConfig = (array) ($config['client'] ?? []);
 $router = new Router('OverPHP\\Controllers', $routePrefix, $container, $clientConfig);
 
 // Demo routes.
+$router->add('GET', '/', 'HelloController@index');
 $router->add('GET', '/hello', 'HelloController@index');
 $router->add('GET', '/hello/{name}', 'HelloController@show');
 $router->add('GET', '/raw', 'HelloController@raw');
