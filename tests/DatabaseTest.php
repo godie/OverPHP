@@ -17,7 +17,8 @@ final class DatabaseTest extends TestCase
             ],
         ];
 
-        $this->assertNull(Database::getConnection($config));
-        $this->assertSame('Database layer is disabled in the configuration.', Database::getLastError());
+        $db = new Database($config);
+        $this->assertNull($db->getConnection());
+        $this->assertSame('Database layer is disabled in the configuration.', $db->getLastError());
     }
 }

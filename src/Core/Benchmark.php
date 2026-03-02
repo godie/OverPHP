@@ -29,7 +29,7 @@ final class Benchmark
         }
 
         return [
-            'time' => round((microtime(true) - self::$startTime) * 1000, 2) . 'ms',
+            'time' => round((microtime(true) - self::$startTime) * 1000, 3) . 'ms',
             'memory' => round((memory_get_usage() - self::$startMemory) / 1024, 2) . 'KB',
             'peak' => round(memory_get_peak_usage() / 1024 / 1024, 2) . 'MB',
         ];

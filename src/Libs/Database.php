@@ -11,20 +11,26 @@ use OverPHP\Libs\Drivers\SqliteDriver;
 final class Database
 {
     /** @var array<string, DriverInterface> */
-    private static array $drivers = [];
+    private array $drivers = [];
 
-    private static ?\PDO $connection = null;
-    private static ?string $lastError = null;
-    private static bool $builtInsLoaded = false;
+    private ?\PDO $connection = null;
+    private ?string $lastError = null;
+    private bool $builtInsLoaded = false;
+    private array $config;
+
+    public function __construct(array $config = [])
+    {
+        $this->config = $config;
+    }
 
     // ── Driver registry ──────────────────────────────────────────
 
     /**
      * Register a custom driver (or override a built-in one).
      */
-    public static function registerDriver(DriverInterface $driver): void
+    public function registerDriver(DriverInterface $driver): void
     {
-        self::$drivers[$driver->getName()] = $driver;
+        $this->drivers[$driver->getName()] = $driver;
     }
 
     /**
@@ -32,44 +38,44 @@ final class Database
      *
      * @return string[]
      */
-    public static function availableDrivers(): array
+    public function availableDrivers(): array
     {
-        self::loadBuiltInDrivers();
+        $this->loadBuiltInDrivers();
 
-        return array_keys(self::$drivers);
+        return array_keys($this->drivers);
     }
 
     // ── Connection ───────────────────────────────────────────────
 
-    public static function isEnabled(array $config): bool
+    public function isEnabled(): bool
     {
-        $dbConfig = $config['database'] ?? [];
+        $dbConfig = $this->config['database'] ?? [];
         return !empty($dbConfig['enabled']);
     }
 
-    public static function getConnection(array $config): ?\PDO
+    public function getConnection(): ?\PDO
     {
-        if (self::$connection !== null) {
-            return self::$connection;
+        if ($this->connection !== null) {
+            return $this->connection;
         }
 
-        if (!self::isEnabled($config)) {
-            self::$lastError = 'Database layer is disabled in the configuration.';
+        if (!$this->isEnabled()) {
+            $this->lastError = 'Database layer is disabled in the configuration.';
             return null;
         }
 
-        self::loadBuiltInDrivers();
+        $this->loadBuiltInDrivers();
 
-        $dbConfig = $config['database'] ?? [];
+        $dbConfig = $this->config['database'] ?? [];
         $driverName = strtolower((string) ($dbConfig['driver'] ?? 'mysql'));
 
-        $driver = self::$drivers[$driverName] ?? null;
+        $driver = $this->drivers[$driverName] ?? null;
 
         if ($driver === null) {
-            self::$lastError = sprintf(
+            $this->lastError = sprintf(
                 "Driver '%s' is not registered. Available: %s.",
                 $driverName,
-                implode(', ', array_keys(self::$drivers))
+                implode(', ', array_keys($this->drivers))
             );
             return null;
         }
@@ -77,26 +83,25 @@ final class Database
         $driverConfig = $dbConfig[$driverName] ?? [];
 
         try {
-            self::$connection = $driver->connect($driverConfig);
-            self::$lastError = null;
-            return self::$connection;
+            $this->connection = $driver->connect($driverConfig);
+            $this->lastError = null;
+            return $this->connection;
         } catch (\PDOException $e) {
-            // Only store a generic message for potential display, log the real one
-            self::$lastError = 'Database connection failed. Please check your configuration and logs.';
+            $this->lastError = 'Database connection failed. Please check your configuration and logs.';
             error_log('Database Connection Error: ' . $e->getMessage());
-            self::$connection = null;
+            $this->connection = null;
             return null;
         } catch (\Throwable $e) {
-            self::$lastError = 'An unexpected error occurred in the database layer.';
+            $this->lastError = 'An unexpected error occurred in the database layer.';
             error_log('Unexpected Database Error: ' . $e->getMessage());
-            self::$connection = null;
+            $this->connection = null;
             return null;
         }
     }
 
-    public static function getLastError(): ?string
+    public function getLastError(): ?string
     {
-        return self::$lastError;
+        return $this->lastError;
     }
 
     // ── Internal ─────────────────────────────────────────────────
@@ -104,13 +109,13 @@ final class Database
     /**
      * Load the drivers that ship with the framework (once).
      */
-    private static function loadBuiltInDrivers(): void
+    private function loadBuiltInDrivers(): void
     {
-        if (self::$builtInsLoaded) {
+        if ($this->builtInsLoaded) {
             return;
         }
 
-        self::$builtInsLoaded = true;
+        $this->builtInsLoaded = true;
 
         $builtIn = [
             new MysqlDriver(),
@@ -118,21 +123,9 @@ final class Database
         ];
 
         foreach ($builtIn as $driver) {
-            // Don't overwrite a user-registered driver with the same name
-            if (!isset(self::$drivers[$driver->getName()])) {
-                self::$drivers[$driver->getName()] = $driver;
+            if (!isset($this->drivers[$driver->getName()])) {
+                $this->drivers[$driver->getName()] = $driver;
             }
         }
-    }
-
-    /**
-     * Reset internal state. Useful for testing.
-     */
-    public static function reset(): void
-    {
-        self::$connection = null;
-        self::$lastError = null;
-        self::$drivers = [];
-        self::$builtInsLoaded = false;
     }
 }
