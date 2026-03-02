@@ -5,9 +5,10 @@ declare(strict_types=1);
 use OverPHP\Core\Benchmark;
 use OverPHP\Core\Router;
 use OverPHP\Core\Security;
+use OverPHP\Core\Container;
+use OverPHP\Libs\Database;
 use function OverPHP\Helpers\corsSendHeaders;
 
-// Use Composer autoloader if available, fallback to manual for standalone
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 } else {
@@ -32,6 +33,11 @@ $config = file_exists(__DIR__ . '/config.php')
     ? require __DIR__ . '/config.php'
     : require __DIR__ . '/config.example.php';
 
+$container = Container::getInstance();
+$container->singleton(Database::class, function () use ($config) {
+    return new Database($config);
+});
+
 Benchmark::start((bool) ($config['benchmark']['enabled'] ?? false));
 Security::sendSecurityHeaders();
 Security::setCsrfEnabled((bool) ($config['security']['csrf_enabled'] ?? true));
@@ -43,9 +49,12 @@ if (corsSendHeaders($config['allowed_origins'] ?? [])) {
 $routePrefix = (string) ($config['route_prefix'] ?? '/api');
 $clientConfig = (array) ($config['client'] ?? []);
 
-$router = new Router('OverPHP\\Controllers', $routePrefix, $clientConfig);
+$router = new Router('OverPHP\\Controllers', $routePrefix, $container, $clientConfig);
 
-// Demo route. Users can replace/add routes here.
+// Demo routes.
+$router->add('GET', '/', 'HelloController@index');
 $router->add('GET', '/hello', 'HelloController@index');
+$router->add('GET', '/hello/{name}', 'HelloController@show');
+$router->add('GET', '/raw', 'HelloController@raw');
 
 $router->run();

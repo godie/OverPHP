@@ -4,19 +4,25 @@ declare(strict_types=1);
 
 namespace OverPHP\Helpers;
 
+use OverPHP\Core\Container;
 use OverPHP\Libs\Database;
 
-function databaseIsEnabled(array $config): bool
+function databaseInstance(): Database
 {
-    return Database::isEnabled($config);
+    return Container::getInstance()->make(Database::class);
 }
 
-function databaseConnection(array $config): ?\PDO
+function databaseIsEnabled(): bool
 {
-    return Database::getConnection($config);
+    return databaseInstance()->isEnabled();
+}
+
+function databaseConnection(): ?\PDO
+{
+    return databaseInstance()->getConnection();
 }
 
 function databaseLastError(): ?string
 {
-    return Database::getLastError();
+    return databaseInstance()->getLastError();
 }

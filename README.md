@@ -1,178 +1,268 @@
 # OverPHP
 
-OverPHP is a minimal API-first PHP framework with:
-- namespaced router (`OverPHP\Core\Router`)
-- optional performance benchmark (`OverPHP\Core\Benchmark`)
-- optional MySQL/SQLite layer (`OverPHP\Libs\Database`)
+Minimal, API-first PHP framework designed for serverless and traditional deployments.
+
+- Dependency Injection container (`OverPHP\Core\Container`)
+- Dynamic routing with parameters (`/user/{id}`)
+- Optional static client serving with SPA fallback
+- Optional MySQL/SQLite layer with pluggable drivers
+- Optional CSRF protection for fullstack use
+- CLI scaffolding tool
 - CORS helper and clean JSON responses
+- Performance benchmark
 
-## Structure
-- `index.php`: framework entrypoint
-- `config.php`: runtime configuration
-- `config.example.php`: configuration template
-- `src/Core/Router.php`: router and response emitter
-- `src/Core/Benchmark.php`: request performance stats (time/memory/peak)
-- `src/Helpers/cors.php`: CORS preflight and headers
-- `src/Helpers/database.php`: helper functions for DB layer
-- `src/Libs/Database.php`: database manager (driver registry)
-- `src/Libs/Drivers/`: pluggable database drivers
-  - `DriverInterface.php`: contract for drivers
-  - `AbstractDriver.php`: base class with shared PDO defaults
-  - `MysqlDriver.php`: MySQL driver
-  - `SqliteDriver.php`: SQLite driver
-- `src/Controllers/HelloController.php`: demo controller
-- `tests/`: minimal PHPUnit tests
+## Install
 
-## Requirements
-- PHP 8.1+ (recommended 8.2+)
-- Composer (for tests/dev workflow)
-- MySQL or SQLite only if DB layer is enabled
+```bash
+composer require godie/overphp
+```
+
+### Scaffold a new project
+
+```bash
+vendor/bin/overphp new my-app
+cd my-app
+composer install
+php -S localhost:8000 index.php
+```
 
 ## Quick Start
-1. Install dev dependencies:
-   - `composer install`
-2. Run tests:
-   - `composer test`
-3. Start local server:
-   - `php -S localhost:8000 index.php`
-4. Test route:
-   - `GET http://localhost:8000/api/hello`
+
+```bash
+composer install
+composer test
+php -S localhost:8000 index.php
+# GET http://localhost:8000/api/hello
+```
+
+## Structure
+
+```
+index.php                          # Entrypoint
+config.example.php                 # Configuration template
+bin/overphp                        # CLI scaffolding tool
+src/
+  Core/
+    Container.php                  # DI service container
+    Router.php                     # Router with dynamic params and client serving
+    Response.php                   # Response object (json, raw)
+    Benchmark.php                  # Request performance stats
+    Security.php                   # Security headers, CSRF, XSS helpers
+  Controllers/
+    HelloController.php            # Demo controller
+  Helpers/
+    cors.php                       # CORS preflight and headers
+    database.php                   # DB helper functions
+  Libs/
+    Database.php                   # Database manager (driver registry)
+    Drivers/
+      DriverInterface.php          # Driver contract
+      AbstractDriver.php           # Base class with PDO defaults
+      MysqlDriver.php              # MySQL driver
+      SqliteDriver.php             # SQLite driver
+tests/                             # PHPUnit tests
+```
+
+## Requirements
+
+- PHP 8.1+
+- Composer
+- MySQL or SQLite only if DB layer is enabled
+
+## Routing
+
+Register routes in `index.php`:
+
+```php
+$router->add('GET', '/hello', 'HelloController@index');
+$router->add('GET', '/hello/{name}', 'HelloController@show');
+$router->add('POST', '/ping', function (): array {
+    return ['pong' => true];
+});
+```
+
+Dynamic parameters are passed to the handler:
+
+```php
+$router->add('GET', '/user/{id}', function (string $id): array {
+    return ['user_id' => $id];
+});
+```
+
+Handler options:
+- Closure (receives route params as arguments)
+- `"Controller@method"` (resolved via DI container)
+
+### Route Options
+
+```php
+$router->add('POST', '/webhook', 'WebhookController@handle', ['skip_csrf' => true]);
+```
+
+## Dependency Injection
+
+The framework includes a simple DI container. Controllers are resolved through it, so constructor dependencies are injected automatically:
+
+```php
+// index.php — register services
+$container = Container::getInstance();
+$container->singleton(Database::class, function () use ($config) {
+    return new Database($config);
+});
+
+// HelloController.php — dependencies injected automatically
+final class HelloController
+{
+    public function __construct(private ?Database $db = null) {}
+
+    public function index(): array
+    {
+        return ['db_enabled' => $this->db?->isEnabled()];
+    }
+}
+```
+
+## Response Object
+
+Controllers can return arrays (auto-serialized to JSON) or `Response` objects for full control:
+
+```php
+use OverPHP\Core\Response;
+
+public function show(string $id): Response
+{
+    return Response::json(['id' => $id], 200);
+}
+
+public function download(): Response
+{
+    return Response::raw($fileContents, 200, [
+        'Content-Type' => 'application/octet-stream',
+    ]);
+}
+```
+
+## Client Serving
+
+Serve a static frontend (React, Vue, etc.) alongside your API. Enable in config:
+
+```php
+'client' => [
+    'enabled' => true,
+    'path' => __DIR__ . '/client',
+    'fallback_index' => 'index.html',
+],
+```
+
+- Requests matching `route_prefix` (`/api`) go to the router
+- All other requests serve static files from the client directory
+- Missing files fall back to `index.html` (SPA support)
+- Directory traversal is prevented
 
 ## Configuration
-Edit `config.php` or use environment variables.
+
+Copy `config.example.php` to `config.php` and edit, or use environment variables.
 
 ### Core
-- `allowed_origins`: CORS allowlist
-- `route_prefix`: default `/api`
+
+| Key | Env | Default | Description |
+|-----|-----|---------|-------------|
+| `allowed_origins` | — | `['http://localhost:5173']` | CORS allowlist |
+| `route_prefix` | `API_PREFIX` | `/api` | API route prefix |
 
 ### Benchmark
-- `benchmark.enabled`: enable `_performance` in JSON responses
-- env: `BENCHMARK_ENABLED=true|false`
+
+| Key | Env | Default |
+|-----|-----|---------|
+| `benchmark.enabled` | `BENCHMARK_ENABLED` | `false` |
+
+When enabled, JSON responses include:
+
+```json
+"_performance": {
+  "time": "1.21ms",
+  "memory": "10.50KB",
+  "peak": "2.45MB"
+}
+```
+
+### Security / CSRF
+
+| Key | Env | Default | Description |
+|-----|-----|---------|-------------|
+| `security.csrf_enabled` | `CSRF_ENABLED` | `false` | Enable session-based CSRF protection |
+
+CSRF is **disabled by default** because the framework is API-first and typically used with stateless authentication (JWT, API keys). Enable it if you use session/cookie-based auth in a fullstack setup.
+
+When enabled, state-changing requests (`POST`, `PUT`, `PATCH`, `DELETE`) must include a valid CSRF token via `X-CSRF-TOKEN` header or `_csrf_token` form field. Individual routes can opt out with `'skip_csrf' => true`.
+
+### Client
+
+| Key | Env | Default |
+|-----|-----|---------|
+| `client.enabled` | `CLIENT_ENABLED` | `false` |
+| `client.path` | `CLIENT_PATH` | `./client` |
+| `client.fallback_index` | — | `index.html` |
 
 ### Database (optional)
-- `database.enabled`: enables PDO connection
-- `database.driver`: `mysql`, `sqlite`, or any custom driver name
 
-The database layer uses a **pluggable driver architecture**. OverPHP ships with
-MySQL and SQLite drivers, and you can register your own.
+| Key | Env | Default |
+|-----|-----|---------|
+| `database.enabled` | `DB_ENABLED` | `false` |
+| `database.driver` | `DB_DRIVER` | `mysql` |
 
-#### Built-in: MySQL
-- `database.mysql.*`: host, port, database, username, password, charset
+The database layer uses a **pluggable driver architecture**. Ships with MySQL and SQLite.
 
-Env variables:
-- `DB_ENABLED`
-- `DB_DRIVER` (default `mysql`)
-- `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_CHARSET`
+#### MySQL
 
-#### Built-in: SQLite
-- `database.sqlite.path`: path to the `.sqlite` file, or `:memory:` for in-memory databases
+```
+DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD, DB_CHARSET
+```
 
-Env variables:
-- `DB_ENABLED`
-- `DB_DRIVER=sqlite`
-- `DB_SQLITE_PATH` (default `./database/overphp.sqlite`)
-
-SQLite example in `config.php`:
+#### SQLite
 
 ```php
 'database' => [
     'enabled' => true,
     'driver'  => 'sqlite',
     'sqlite'  => [
-        // File-based — the file is created automatically if it doesn't exist:
         'path' => __DIR__ . '/database/overphp.sqlite',
-
-        // Or use an in-memory database (useful for testing, data lost on shutdown):
-        // 'path' => ':memory:',
-
         'options' => [],
     ],
 ],
 ```
 
-> **Tip:** SQLite requires no external server. It is ideal for local development,
-> prototyping, testing, or small-scale APIs. The framework automatically enables
-> WAL mode and foreign key enforcement.
+> SQLite requires no external server. Ideal for development, testing, or small-scale APIs.
 
-#### Creating a Custom Driver
+#### Custom Driver
 
-Create a class that implements `DriverInterface` (or extends `AbstractDriver`
-for free PDO defaults):
+Implement `DriverInterface` or extend `AbstractDriver`:
 
 ```php
-<?php
-declare(strict_types=1);
-
-namespace App\Drivers;
-
-use OverPHP\Libs\Drivers\AbstractDriver;
-
 final class PgsqlDriver extends AbstractDriver
 {
-    public function getName(): string
-    {
-        return 'pgsql';
-    }
+    public function getName(): string { return 'pgsql'; }
 
     public function connect(array $driverConfig): \PDO
     {
-        $host     = $driverConfig['host'] ?? '127.0.0.1';
-        $port     = $driverConfig['port'] ?? 5432;
-        $database = $driverConfig['database'] ?? '';
-        $username = $driverConfig['username'] ?? '';
-        $password = $driverConfig['password'] ?? '';
-
-        $dsn = sprintf('pgsql:host=%s;port=%d;dbname=%s', $host, $port, $database);
-
-        return new \PDO($dsn, $username, $password, $this->mergeOptions($driverConfig['options'] ?? []));
+        $dsn = sprintf('pgsql:host=%s;port=%d;dbname=%s',
+            $driverConfig['host'] ?? '127.0.0.1',
+            $driverConfig['port'] ?? 5432,
+            $driverConfig['database'] ?? ''
+        );
+        return new \PDO($dsn, $driverConfig['username'] ?? '', $driverConfig['password'] ?? '',
+            $this->mergeOptions($driverConfig['options'] ?? []));
     }
 }
 ```
 
-Then register it before calling `getConnection()`:
+Register before use:
 
 ```php
-use OverPHP\Libs\Database;
-use App\Drivers\PgsqlDriver;
-
 Database::registerDriver(new PgsqlDriver());
 ```
 
-And add the config section:
-
-```php
-'database' => [
-    'enabled' => true,
-    'driver'  => 'pgsql',
-    'pgsql'   => [
-        'host' => '127.0.0.1',
-        'port' => 5432,
-        'database' => 'myapp',
-        'username' => 'postgres',
-        'password' => 'secret',
-        'options' => [],
-    ],
-],
-```
-
-If DB is disabled, the framework works normally without trying to connect.
-
-## Adding Routes
-In `index.php`, register routes with:
-
-```php
-$router->add('GET', '/hello', 'HelloController@index');
-$router->add('POST', '/ping', function (): array {
-    return ['pong' => true];
-});
-```
-
-Handler options:
-- Closure
-- `"Controller@method"` (controller under `OverPHP\Controllers`)
-
 ## Creating a Controller
-Create `src/Controllers/MyController.php`:
 
 ```php
 <?php
@@ -189,19 +279,10 @@ final class MyController
 }
 ```
 
-Then add route:
-
 ```php
 $router->add('GET', '/my', 'MyController@index');
 ```
 
-## Benchmark Output
-When enabled, JSON responses include:
+## License
 
-```json
-"_performance": {
-  "time": "1.21ms",
-  "memory": "10.50KB",
-  "peak": "2.45MB"
-}
-```
+MIT

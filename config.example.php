@@ -20,7 +20,7 @@ return [
     'security' => [
         // Set to true if using sessions/cookies for authentication.
         // Set to false for stateless APIs (e.g. using JWT/Tokens).
-        'csrf_enabled' => filter_var(getenv('CSRF_ENABLED') ?: 'true', FILTER_VALIDATE_BOOLEAN),
+        'csrf_enabled' => filter_var(getenv('CSRF_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN),
     ],
     // ─── Database ─────────────────────────────────────────────────
     // Supported drivers: 'mysql', 'sqlite'
