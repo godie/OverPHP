@@ -13,9 +13,14 @@ final class Database
     /** @var array<string, DriverInterface> */
     private array $drivers = [];
 
+    /** @var array<string, class-string<DriverInterface>> */
+    private array $driverMap = [
+        'mysql'  => MysqlDriver::class,
+        'sqlite' => SqliteDriver::class,
+    ];
+
     private ?\PDO $connection = null;
     private ?string $lastError = null;
-    private bool $builtInsLoaded = false;
     private array $config;
 
     public function __construct(array $config = [])
@@ -30,7 +35,7 @@ final class Database
      */
     public function registerDriver(DriverInterface $driver): void
     {
-        $this->drivers[$driver->getName()] = $driver;
+        $this->drivers[strtolower($driver->getName())] = $driver;
     }
 
     /**
@@ -40,9 +45,10 @@ final class Database
      */
     public function availableDrivers(): array
     {
-        $this->loadBuiltInDrivers();
-
-        return array_keys($this->drivers);
+        return array_values(array_unique(array_merge(
+            array_keys($this->driverMap),
+            array_keys($this->drivers)
+        )));
     }
 
     // ── Connection ───────────────────────────────────────────────
@@ -64,18 +70,16 @@ final class Database
             return null;
         }
 
-        $this->loadBuiltInDrivers();
-
         $dbConfig = $this->config['database'] ?? [];
         $driverName = strtolower((string) ($dbConfig['driver'] ?? 'mysql'));
 
-        $driver = $this->drivers[$driverName] ?? null;
+        $driver = $this->resolveDriver($driverName);
 
         if ($driver === null) {
             $this->lastError = sprintf(
                 "Driver '%s' is not registered. Available: %s.",
                 $driverName,
-                implode(', ', array_keys($this->drivers))
+                implode(', ', $this->availableDrivers())
             );
             return null;
         }
@@ -107,25 +111,20 @@ final class Database
     // ── Internal ─────────────────────────────────────────────────
 
     /**
-     * Load the drivers that ship with the framework (once).
+     * Resolve a driver by name, instantiating it if necessary.
      */
-    private function loadBuiltInDrivers(): void
+    private function resolveDriver(string $name): ?DriverInterface
     {
-        if ($this->builtInsLoaded) {
-            return;
+        if (isset($this->drivers[$name])) {
+            return $this->drivers[$name];
         }
 
-        $this->builtInsLoaded = true;
-
-        $builtIn = [
-            new MysqlDriver(),
-            new SqliteDriver(),
-        ];
-
-        foreach ($builtIn as $driver) {
-            if (!isset($this->drivers[$driver->getName()])) {
-                $this->drivers[$driver->getName()] = $driver;
-            }
+        if (isset($this->driverMap[$name])) {
+            $class = $this->driverMap[$name];
+            $this->drivers[$name] = new $class();
+            return $this->drivers[$name];
         }
+
+        return null;
     }
 }
