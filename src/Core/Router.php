@@ -6,7 +6,7 @@ namespace OverPHP\Core;
 
 final class Router
 {
-    /** @var array<int,array{method:string,path:string,handler:mixed,options:array,pattern:string}> */
+    /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, pattern:string}>}> */
     private array $routes = [];
 
     private string $controllerNamespace;
@@ -40,19 +40,29 @@ final class Router
      */
     public function add(string $method, string $path, $handler, array $options = []): void
     {
-        $this->routes[] = [
-            'method' => strtoupper($method),
-            'path' => $path,
-            'handler' => $handler,
-            'options' => $options,
-            'pattern' => $this->convertPathToRegex($path),
-        ];
+        $method = strtoupper($method);
+        if (!isset($this->routes[$method])) {
+            $this->routes[$method] = ['static' => [], 'dynamic' => []];
+        }
+
+        if (strpos($path, '{') === false) {
+            $this->routes[$method]['static'][$path] = [
+                'handler' => $handler,
+                'options' => $options,
+            ];
+        } else {
+            $this->routes[$method]['dynamic'][] = [
+                'path' => $path,
+                'handler' => $handler,
+                'options' => $options,
+                'pattern' => $this->convertPathToRegex($path),
+            ];
+        }
     }
 
     public function run(): void
     {
-        $uri = $_SERVER['REQUEST_URI'] ?? '/';
-        $uri = explode('?', $uri)[0];
+        $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
         if ($this->clientConfig['enabled'] && !str_starts_with($uri, $this->prefix)) {
@@ -63,55 +73,81 @@ final class Router
 
         if ($this->prefix !== '' && str_starts_with($uri, $this->prefix)) {
             $uri = substr($uri, strlen($this->prefix));
+            if ($uri === '') {
+                $uri = '/';
+            }
         }
 
-        foreach ($this->routes as $route) {
-            if ($route['method'] !== $method) {
-                continue;
+        if (!isset($this->routes[$method])) {
+            $this->sendError(404, 'Not Found');
+            return;
+        }
+
+        // 1. Check static routes (O(1))
+        if (isset($this->routes[$method]['static'][$uri])) {
+            $route = $this->routes[$method]['static'][$uri];
+            if ($this->validateCsrf($method, $route['options'])) {
+                $this->handleRoute($route['handler']);
             }
+            return;
+        }
 
+        // 2. Check dynamic routes (Regex)
+        foreach ($this->routes[$method]['dynamic'] as $route) {
             if (preg_match($route['pattern'], $uri, $matches)) {
-                if (Security::isCsrfEnabled() &&
-                    empty($route['options']['skip_csrf']) &&
-                    in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
-
-                    $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['_csrf_token'] ?? null;
-                    if (!Security::validateCsrfToken($token)) {
-                        $this->sendError(403, 'Invalid CSRF token');
-                        return;
-                    }
+                if ($this->validateCsrf($method, $route['options'])) {
+                    $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
+                    $this->handleRoute($route['handler'], $params);
                 }
-
-                $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-                $handler = $route['handler'];
-
-                if (is_callable($handler)) {
-                    $response = $handler(...array_values($params));
-                    $this->emitResponse($response);
-                    return;
-                }
-
-                if (is_string($handler) && strpos($handler, '@') !== false) {
-                    [$controller, $methodName] = explode('@', $handler, 2);
-                    $controllerClass = $this->resolveControllerFqn($controller);
-
-                    if (!class_exists($controllerClass)) {
-                        break;
-                    }
-
-                    $instance = $this->container->make($controllerClass);
-                    if (!method_exists($instance, $methodName)) {
-                        break;
-                    }
-
-                    $response = $instance->$methodName(...array_values($params));
-                    $this->emitResponse($response);
-                    return;
-                }
+                return;
             }
         }
 
         $this->sendError(404, 'Not Found');
+    }
+
+    private function validateCsrf(string $method, array $options): bool
+    {
+        if (Security::isCsrfEnabled() &&
+            empty($options['skip_csrf']) &&
+            in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+
+            $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['_csrf_token'] ?? null;
+            if (!Security::validateCsrfToken($token)) {
+                $this->sendError(403, 'Invalid CSRF token');
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private function handleRoute(mixed $handler, array $params = []): void
+    {
+        if (is_callable($handler)) {
+            $response = $handler(...array_values($params));
+            $this->emitResponse($response);
+            return;
+        }
+
+        if (is_string($handler) && strpos($handler, '@') !== false) {
+            [$controller, $methodName] = explode('@', $handler, 2);
+            $controllerClass = $this->resolveControllerFqn($controller);
+
+            if (!class_exists($controllerClass)) {
+                $this->sendError(404, 'Controller Not Found');
+                return;
+            }
+
+            $instance = $this->container->make($controllerClass);
+            if (!method_exists($instance, $methodName)) {
+                $this->sendError(404, 'Action Not Found');
+                return;
+            }
+
+            $response = $instance->$methodName(...array_values($params));
+            $this->emitResponse($response);
+            return;
+        }
     }
 
     private function convertPathToRegex(string $path): string
@@ -219,6 +255,11 @@ final class Router
         if ($string === '') {
             return false;
         }
+
+        if (function_exists('json_validate')) {
+            return json_validate($string);
+        }
+
         $first = $string[0];
         $last = substr($string, -1);
         if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
@@ -230,8 +271,10 @@ final class Router
 
     private function sendError(int $code, string $message): void
     {
-        http_response_code($code);
-        header('Content-Type: application/json; charset=utf-8');
+        if (!headers_sent()) {
+            http_response_code($code);
+            header('Content-Type: application/json; charset=utf-8');
+        }
         echo json_encode(['success' => false, 'error' => $message]);
     }
 }

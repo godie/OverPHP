@@ -37,10 +37,12 @@ final class Security
     {
         if (session_status() === PHP_SESSION_NONE) {
             session_start([
-                'cookie_httponly' => true,
-                'cookie_secure'   => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on',
-                'cookie_samesite' => 'Lax',
-                'use_strict_mode' => true,
+                'cookie_httponly'  => true,
+                'cookie_secure'    => self::isConnectionSecure(),
+                'cookie_samesite'  => 'Lax',
+                'use_strict_mode'  => true,
+                'use_only_cookies' => true,
+                'cookie_lifetime'  => 0,
             ]);
         }
     }
@@ -94,16 +96,21 @@ final class Security
         header('X-Content-Type-Options: nosniff');
 
         // Prevent Clickjacking
-        header('X-Frame-Options: SAMEORIGIN');
+        header('X-Frame-Options: DENY');
 
-        // Basic XSS Protection (mostly for older browsers, still good practice)
+        // Basic XSS Protection
         header('X-XSS-Protection: 1; mode=block');
 
         // Referrer Policy
         header('Referrer-Policy: strict-origin-when-cross-origin');
 
-        // Content Security Policy (Basic default, can be customized)
-        header("Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none';");
+        // Content Security Policy
+        header("Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none';");
+
+        // HSTS (Strict-Transport-Security)
+        if (self::isConnectionSecure()) {
+            header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
+        }
     }
 
     /**
@@ -120,5 +127,14 @@ final class Security
     public static function jsonEncode(mixed $data): string|false
     {
         return json_encode($data, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * Helper method to determine if the current connection is secure (HTTPS).
+     */
+    private static function isConnectionSecure(): bool
+    {
+        return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
+            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
     }
 }
