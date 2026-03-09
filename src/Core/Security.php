@@ -14,6 +14,8 @@ final class Security
 
     private static bool $csrfEnabled = true;
 
+    private static ?bool $isSecureCache = null;
+
     /**
      * Set whether CSRF protection is enabled.
      */
@@ -59,10 +61,16 @@ final class Security
 
     /**
      * Generate a new CSRF token and store it in the session.
+     * Reuses an existing token if available.
      */
     public static function generateCsrfToken(): string
     {
         self::startSecureSession();
+
+        if (isset($_SESSION[self::CSRF_TOKEN_NAME])) {
+            return (string) $_SESSION[self::CSRF_TOKEN_NAME];
+        }
+
         $token = bin2hex(random_bytes(32));
         $_SESSION[self::CSRF_TOKEN_NAME] = $token;
         return $token;
@@ -134,7 +142,13 @@ final class Security
      */
     private static function isConnectionSecure(): bool
     {
-        return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')
-            || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+        if (self::$isSecureCache !== null) {
+            return self::$isSecureCache;
+        }
+
+        return self::$isSecureCache = (
+            (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
+            (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https')
+        );
     }
 }

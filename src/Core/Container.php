@@ -15,6 +15,9 @@ final class Container
     /** @var array<string, mixed> */
     private array $instances = [];
 
+    /** @var array<string, \ReflectionClass> */
+    private static array $reflectionCache = [];
+
     private static ?self $instance = null;
 
     public static function getInstance(): self
@@ -83,7 +86,12 @@ final class Container
             return $concrete;
         }
 
-        $reflector = new \ReflectionClass($concrete);
+        if (isset(self::$reflectionCache[$concrete])) {
+            $reflector = self::$reflectionCache[$concrete];
+        } else {
+            $reflector = new \ReflectionClass($concrete);
+            self::$reflectionCache[$concrete] = $reflector;
+        }
 
         if (!$reflector->isInstantiable()) {
             throw new \Exception("Class {$concrete} is not instantiable.");
