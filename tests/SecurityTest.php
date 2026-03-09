@@ -53,4 +53,11 @@ final class SecurityTest extends TestCase
         $this->assertFalse(Security::isCsrfEnabled());
         Security::setCsrfEnabled(true); // reset
     }
+
+    public function testGenerateCsrfTokenReusesExistingToken(): void
+    {
+        $token1 = Security::generateCsrfToken();
+        $token2 = Security::generateCsrfToken();
+        $this->assertEquals($token1, $token2);
+    }
 }

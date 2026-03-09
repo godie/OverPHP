@@ -26,10 +26,6 @@ abstract class AbstractDriver implements DriverInterface
             \PDO::ATTR_EMULATE_PREPARES   => false,
         ];
 
-        foreach ($overrides as $key => $value) {
-            $defaults[$key] = $value;
-        }
-
-        return $defaults;
+        return $overrides + $defaults;
     }
 }

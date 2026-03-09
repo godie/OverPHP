@@ -6,6 +6,19 @@ namespace OverPHP\Core;
 
 final class Router
 {
+    private const MIME_TYPES = [
+        'html' => 'text/html',
+        'css'  => 'text/css',
+        'js'   => 'application/javascript',
+        'json' => 'application/json',
+        'png'  => 'image/png',
+        'jpg'  => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'gif'  => 'image/gif',
+        'svg'  => 'image/svg+xml',
+        'ico'  => 'image/x-icon',
+    ];
+
     /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, pattern:string}>}> */
     private array $routes = [];
 
@@ -14,6 +27,7 @@ final class Router
     private ?Container $container;
     /** @var array{enabled:bool,path:string,fallback_index:string} */
     private array $clientConfig;
+    private ?string $resolvedClientPath = null;
 
     /**
      * @param array{enabled?:bool,path?:string,fallback_index?:string} $clientConfig
@@ -32,6 +46,10 @@ final class Router
             'path' => '',
             'fallback_index' => 'index.html',
         ], $clientConfig);
+
+        if ($this->clientConfig['enabled'] && $this->clientConfig['path'] !== '') {
+            $this->resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
+        }
     }
 
     /**
@@ -157,21 +175,19 @@ final class Router
 
     private function serveClient(string $uri): bool
     {
-        $clientPath = rtrim($this->clientConfig['path'], '/');
-        if ($clientPath === '' || !is_dir($clientPath)) {
+        if ($this->resolvedClientPath === null) {
             return false;
         }
 
-        $filePath = $clientPath . $uri;
+        $filePath = $this->resolvedClientPath . $uri;
 
         if (is_dir($filePath)) {
             $filePath = rtrim($filePath, '/') . '/' . $this->clientConfig['fallback_index'];
         }
 
-        $realClientPath = realpath($clientPath);
         $realFilePath = realpath($filePath);
 
-        if ($realFilePath && $realClientPath && str_starts_with($realFilePath, $realClientPath) && is_file($realFilePath)) {
+        if ($realFilePath && str_starts_with($realFilePath, $this->resolvedClientPath) && is_file($realFilePath)) {
             $this->serveFile($realFilePath);
             return true;
         }
@@ -189,20 +205,7 @@ final class Router
     private function serveFile(string $filePath): void
     {
         $extension = pathinfo($filePath, PATHINFO_EXTENSION);
-        $mimeTypes = [
-            'html' => 'text/html',
-            'css'  => 'text/css',
-            'js'   => 'application/javascript',
-            'json' => 'application/json',
-            'png'  => 'image/png',
-            'jpg'  => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'gif'  => 'image/gif',
-            'svg'  => 'image/svg+xml',
-            'ico'  => 'image/x-icon',
-        ];
-
-        $contentType = $mimeTypes[$extension] ?? 'application/octet-stream';
+        $contentType = self::MIME_TYPES[$extension] ?? 'application/octet-stream';
         header('Content-Type: ' . $contentType);
         readfile($filePath);
     }
@@ -252,6 +255,7 @@ final class Router
 
     private function isJson(string $string): bool
     {
+        $string = trim($string);
         if ($string === '') {
             return false;
         }
@@ -275,6 +279,6 @@ final class Router
             http_response_code($code);
             header('Content-Type: application/json; charset=utf-8');
         }
-        echo json_encode(['success' => false, 'error' => $message]);
+        echo Security::jsonEncode(['success' => false, 'error' => $message]);
     }
 }
