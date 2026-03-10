@@ -19,8 +19,11 @@ final class Router
         'ico'  => 'image/x-icon',
     ];
 
-    /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, pattern:string}>}> */
+    /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, params:array<string>}>}> */
     private array $routes = [];
+
+    /** @var array<string, string> */
+    private array $compiledRegex = [];
 
     private string $controllerNamespace;
     private string $prefix;
@@ -69,11 +72,12 @@ final class Router
                 'options' => $options,
             ];
         } else {
+            preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $path, $matches);
             $this->routes[$method]['dynamic'][] = [
                 'path' => $path,
                 'handler' => $handler,
                 'options' => $options,
-                'pattern' => $this->convertPathToRegex($path),
+                'params' => $matches[1],
             ];
         }
     }
@@ -110,15 +114,19 @@ final class Router
             return;
         }
 
-        // 2. Check dynamic routes (Regex)
-        foreach ($this->routes[$method]['dynamic'] as $route) {
-            if (preg_match($route['pattern'], $uri, $matches)) {
-                if ($this->validateCsrf($method, $route['options'])) {
-                    $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-                    $this->handleRoute($route['handler'], $params);
+        // 2. Check dynamic routes (Combined Regex for high performance)
+        $compiled = $this->getCompiledRegex($method);
+        if ($compiled && preg_match($compiled, $uri, $matches)) {
+            $index = (int) $matches['MARK'];
+            $route = $this->routes[$method]['dynamic'][$index];
+            if ($this->validateCsrf($method, $route['options'])) {
+                $params = [];
+                foreach ($route['params'] as $i => $name) {
+                    $params[$name] = $matches[$i + 1] ?? '';
                 }
-                return;
+                $this->handleRoute($route['handler'], $params);
             }
+            return;
         }
 
         $this->sendError(404, 'Not Found');
@@ -168,9 +176,23 @@ final class Router
         }
     }
 
-    private function convertPathToRegex(string $path): string
+    private function getCompiledRegex(string $method): ?string
     {
-        return '#^' . preg_replace('/\{([a-zA-Z0-9_]+)\}/', '(?P<$1>[^/]+)', $path) . '$#';
+        if (isset($this->compiledRegex[$method])) {
+            return $this->compiledRegex[$method];
+        }
+
+        if (empty($this->routes[$method]['dynamic'])) {
+            return null;
+        }
+
+        $patterns = [];
+        foreach ($this->routes[$method]['dynamic'] as $index => $route) {
+            $pattern = preg_replace('/\{[a-zA-Z0-9_]+\}/', '([^/]+)', $route['path']);
+            $patterns[] = $pattern . '(*MARK:' . $index . ')';
+        }
+
+        return $this->compiledRegex[$method] = '#^(?|' . implode('|', $patterns) . ')$#';
     }
 
     private function serveClient(string $uri): bool
@@ -192,7 +214,7 @@ final class Router
             return true;
         }
 
-        $fallbackPath = $clientPath . '/' . $this->clientConfig['fallback_index'];
+        $fallbackPath = $this->resolvedClientPath . '/' . $this->clientConfig['fallback_index'];
         $realFallbackPath = realpath($fallbackPath);
         if ($realFallbackPath && is_file($realFallbackPath)) {
             $this->serveFile($realFallbackPath);
@@ -226,51 +248,7 @@ final class Router
             return;
         }
 
-        if (is_array($response) || is_object($response)) {
-            header('Content-Type: application/json; charset=utf-8');
-            $output = (array) $response;
-
-            $stats = Benchmark::stats();
-            if ($stats !== null) {
-                $output['_performance'] = $stats;
-            }
-
-            try {
-                echo Security::jsonEncode($output);
-            } catch (\JsonException $e) {
-                $this->sendError(500, 'Internal Server Error');
-            }
-            return;
-        }
-
-        if (is_string($response)) {
-            if ($this->isJson($response)) {
-                header('Content-Type: application/json; charset=utf-8');
-                echo $response;
-            } else {
-                echo Security::escape($response);
-            }
-        }
-    }
-
-    private function isJson(string $string): bool
-    {
-        $string = trim($string);
-        if ($string === '') {
-            return false;
-        }
-
-        if (function_exists('json_validate')) {
-            return json_validate($string);
-        }
-
-        $first = $string[0];
-        $last = substr($string, -1);
-        if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
-            json_decode($string);
-            return json_last_error() === JSON_ERROR_NONE;
-        }
-        return false;
+        (new Response($response))->send();
     }
 
     private function sendError(int $code, string $message): void
