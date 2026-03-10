@@ -27,32 +27,71 @@ final class Response
 
     public function send(): void
     {
-        http_response_code($this->statusCode);
+        $headersSent = headers_sent();
 
-        foreach ($this->headers as $name => $value) {
-            header("$name: $value");
+        if (!$headersSent) {
+            http_response_code($this->statusCode);
+
+            foreach ($this->headers as $name => $value) {
+                header("$name: $value");
+            }
         }
 
         if (is_array($this->content) || is_object($this->content)) {
-            if (!headers_sent()) {
-                header('Content-Type: application/json; charset=utf-8');
-            }
-
-            $output = (array) $this->content;
-            $stats = Benchmark::stats();
-            if ($stats !== null) {
-                $output['_performance'] = $stats;
-            }
-
-            try {
-                echo Security::jsonEncode($output);
-            } catch (\JsonException $e) {
-                http_response_code(500);
-                echo json_encode(['success' => false, 'error' => 'Internal Server Error']);
-            }
+            $this->sendJson($this->content, $headersSent);
             return;
         }
 
-        echo $this->content;
+        if (is_string($this->content) && $this->isJson($this->content)) {
+            if (!$headersSent) {
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            echo $this->content;
+            return;
+        }
+
+        echo is_string($this->content) ? Security::escape($this->content) : (string) $this->content;
+    }
+
+    private function sendJson(mixed $data, bool $headersSent): void
+    {
+        if (!$headersSent) {
+            header('Content-Type: application/json; charset=utf-8');
+        }
+
+        $output = (array) $data;
+        $stats = Benchmark::stats();
+        if ($stats !== null) {
+            $output['_performance'] = $stats;
+        }
+
+        try {
+            echo Security::jsonEncode($output);
+        } catch (\JsonException $e) {
+            if (!headers_sent()) {
+                http_response_code(500);
+            }
+            echo json_encode(['success' => false, 'error' => 'Internal Server Error']);
+        }
+    }
+
+    private function isJson(string $string): bool
+    {
+        $string = trim($string);
+        if ($string === '') {
+            return false;
+        }
+
+        if (function_exists('json_validate')) {
+            return json_validate($string);
+        }
+
+        $first = $string[0];
+        $last = substr($string, -1);
+        if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
+            json_decode($string);
+            return json_last_error() === JSON_ERROR_NONE;
+        }
+        return false;
     }
 }

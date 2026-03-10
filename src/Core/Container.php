@@ -60,9 +60,10 @@ final class Container
             return $this->instances[$abstract];
         }
 
-        $concrete = $this->bindings[$abstract]['concrete'] ?? $abstract;
+        $isBound = isset($this->bindings[$abstract]);
+        $concrete = $isBound ? $this->bindings[$abstract]['concrete'] : $abstract;
 
-        if ($concrete instanceof \Closure || (is_string($concrete) && is_callable($concrete))) {
+        if ($concrete instanceof \Closure || (is_string($concrete) && !class_exists($concrete) && is_callable($concrete))) {
             $object = $concrete($this);
         } elseif (is_object($concrete)) {
             $object = $concrete;
@@ -70,7 +71,7 @@ final class Container
             $object = $this->build($concrete);
         }
 
-        if (isset($this->bindings[$abstract]['shared']) && $this->bindings[$abstract]['shared']) {
+        if (!$isBound || $this->bindings[$abstract]['shared']) {
             $this->instances[$abstract] = $object;
         }
 
