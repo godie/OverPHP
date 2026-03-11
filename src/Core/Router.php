@@ -84,7 +84,7 @@ final class Router
 
     public function run(): void
     {
-        $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+        $uri = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/';
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
         if ($this->clientConfig['enabled'] && !str_starts_with($uri, $this->prefix)) {
@@ -138,7 +138,7 @@ final class Router
             empty($options['skip_csrf']) &&
             in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
 
-            $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['_csrf_token'] ?? null;
+            $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_SERVER['HTTP_X_XSRF_TOKEN'] ?? $_POST['_csrf_token'] ?? null;
             if (!Security::validateCsrfToken($token)) {
                 $this->sendError(403, 'Invalid CSRF token');
                 return false;
@@ -226,9 +226,26 @@ final class Router
 
     private function serveFile(string $filePath): void
     {
-        $extension = pathinfo($filePath, PATHINFO_EXTENSION);
-        $contentType = self::MIME_TYPES[$extension] ?? 'application/octet-stream';
-        header('Content-Type: ' . $contentType);
+        $lastModified = filemtime($filePath);
+        $etag = md5_file($filePath);
+
+        if (!headers_sent()) {
+            $extension = pathinfo($filePath, PATHINFO_EXTENSION);
+            $contentType = self::MIME_TYPES[$extension] ?? 'application/octet-stream';
+
+            header('Content-Type: ' . $contentType);
+            header('Cache-Control: public, max-age=3600');
+            header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastModified) . ' GMT');
+            header('ETag: "' . $etag . '"');
+            header('Content-Length: ' . filesize($filePath));
+
+            $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+            if ($ifNoneMatch !== '' && trim($ifNoneMatch, '" ') === $etag) {
+                http_response_code(304);
+                return;
+            }
+        }
+
         readfile($filePath);
     }
 

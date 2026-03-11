@@ -9,6 +9,8 @@ namespace OverPHP\Core;
  */
 final class Response
 {
+    private bool $isRaw = false;
+
     public function __construct(
         private mixed $content,
         private int $statusCode = 200,
@@ -22,7 +24,9 @@ final class Response
 
     public static function raw(string $content, int $statusCode = 200, array $headers = []): self
     {
-        return new self($content, $statusCode, $headers);
+        $instance = new self($content, $statusCode, $headers);
+        $instance->isRaw = true;
+        return $instance;
     }
 
     public function send(): void
@@ -35,6 +39,11 @@ final class Response
             foreach ($this->headers as $name => $value) {
                 header("$name: $value");
             }
+        }
+
+        if ($this->isRaw) {
+            echo (string) $this->content;
+            return;
         }
 
         if (is_array($this->content) || is_object($this->content)) {
