@@ -68,9 +68,11 @@ final class Response
             header('Content-Type: application/json; charset=utf-8');
         }
 
-        $output = (array) $data;
         $stats = Benchmark::stats();
+        $output = $data;
+
         if ($stats !== null) {
+            $output = (array) $data;
             $output['_performance'] = $stats;
         }
 
@@ -86,17 +88,35 @@ final class Response
 
     private function isJson(string $string): bool
     {
-        $string = trim($string);
         if ($string === '') {
             return false;
+        }
+
+        $first = $string[0];
+        if ($first !== '{' && $first !== '[') {
+            if ($first !== ' ' && $first !== "\n" && $first !== "\r" && $first !== "\t") {
+                return false;
+            }
+            $string = ltrim($string);
+            if ($string === '') {
+                return false;
+            }
+            $first = $string[0];
+            if ($first !== '{' && $first !== '[') {
+                return false;
+            }
         }
 
         if (function_exists('json_validate')) {
             return json_validate($string);
         }
 
-        $first = $string[0];
         $last = substr($string, -1);
+        if ($last !== '}' && $last !== ']') {
+            $string = rtrim($string);
+            $last = substr($string, -1);
+        }
+
         if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
             json_decode($string);
             return json_last_error() === JSON_ERROR_NONE;

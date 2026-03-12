@@ -64,7 +64,9 @@ final class OptimizationAndFixesTest extends TestCase
         }
         $filePath = $clientPath . '/test.txt';
         file_put_contents($filePath, 'test content');
-        $etag = md5_file($filePath);
+        $lastModified = filemtime($filePath);
+        $fileSize = filesize($filePath);
+        $etag = sprintf('"%x-%x"', $lastModified, $fileSize);
 
         $_SERVER['REQUEST_METHOD'] = 'GET';
         $_SERVER['REQUEST_URI'] = '/test.txt';

@@ -17,6 +17,9 @@ final class Router
         'gif'  => 'image/gif',
         'svg'  => 'image/svg+xml',
         'ico'  => 'image/x-icon',
+        'webp' => 'image/webp',
+        'txt'  => 'text/plain',
+        'pdf'  => 'application/pdf',
     ];
 
     /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, params:array<string>}>}> */
@@ -31,6 +34,7 @@ final class Router
     /** @var array{enabled:bool,path:string,fallback_index:string} */
     private array $clientConfig;
     private ?string $resolvedClientPath = null;
+    private ?string $resolvedFallbackPath = null;
 
     /**
      * @param array{enabled?:bool,path?:string,fallback_index?:string} $clientConfig
@@ -41,7 +45,7 @@ final class Router
         ?Container $container = null,
         array $clientConfig = []
     ) {
-        $this->controllerNamespace = $controllerNamespace;
+        $this->controllerNamespace = rtrim($controllerNamespace, '\\');
         $this->prefix = $prefix;
         $this->container = $container ?? Container::getInstance();
         $this->clientConfig = array_merge([
@@ -52,6 +56,10 @@ final class Router
 
         if ($this->clientConfig['enabled'] && $this->clientConfig['path'] !== '') {
             $this->resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
+            if ($this->resolvedClientPath !== null) {
+                $fallbackPath = $this->resolvedClientPath . DIRECTORY_SEPARATOR . $this->clientConfig['fallback_index'];
+                $this->resolvedFallbackPath = realpath($fallbackPath) ?: null;
+            }
         }
     }
 
@@ -214,10 +222,8 @@ final class Router
             return true;
         }
 
-        $fallbackPath = $this->resolvedClientPath . '/' . $this->clientConfig['fallback_index'];
-        $realFallbackPath = realpath($fallbackPath);
-        if ($realFallbackPath && is_file($realFallbackPath)) {
-            $this->serveFile($realFallbackPath);
+        if ($this->resolvedFallbackPath !== null && is_file($this->resolvedFallbackPath)) {
+            $this->serveFile($this->resolvedFallbackPath);
             return true;
         }
 
@@ -227,7 +233,8 @@ final class Router
     private function serveFile(string $filePath): void
     {
         $lastModified = filemtime($filePath);
-        $etag = md5_file($filePath);
+        $fileSize = filesize($filePath);
+        $etag = sprintf('"%x-%x"', $lastModified, $fileSize);
 
         if (!headers_sent()) {
             $extension = pathinfo($filePath, PATHINFO_EXTENSION);
@@ -236,11 +243,11 @@ final class Router
             header('Content-Type: ' . $contentType);
             header('Cache-Control: public, max-age=3600');
             header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastModified) . ' GMT');
-            header('ETag: "' . $etag . '"');
-            header('Content-Length: ' . filesize($filePath));
+            header('ETag: ' . $etag);
+            header('Content-Length: ' . $fileSize);
 
             $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
-            if ($ifNoneMatch !== '' && trim($ifNoneMatch, '" ') === $etag) {
+            if ($ifNoneMatch !== '' && trim($ifNoneMatch, '" ') === trim($etag, '" ')) {
                 http_response_code(304);
                 return;
             }
@@ -255,7 +262,7 @@ final class Router
             return $controller;
         }
 
-        return rtrim($this->controllerNamespace, '\\') . '\\' . $controller;
+        return $this->controllerNamespace . '\\' . $controller;
     }
 
     private function emitResponse(mixed $response): void
