@@ -88,4 +88,40 @@ final class OptimizationAndFixesTest extends TestCase
         unlink($filePath);
         rmdir($clientPath);
     }
+
+    public function testRouterPreventsPathTraversalToSiblingDirectory(): void
+    {
+        $basePath = __DIR__ . '/../temp_traversal_' . uniqid();
+        mkdir($basePath);
+        $publicPath = $basePath . '/public';
+        $secretPath = $basePath . '/secret';
+        mkdir($publicPath);
+        mkdir($secretPath);
+
+        file_put_contents($publicPath . '/index.html', 'public content');
+        file_put_contents($secretPath . '/secret.txt', 'secret content');
+
+        $_SERVER['REQUEST_METHOD'] = 'GET';
+        $_SERVER['REQUEST_URI'] = '/../secret/secret.txt';
+
+        $router = new Router('OverPHP\\Controllers', '/api', null, [
+            'enabled' => true,
+            'path' => $publicPath,
+            'fallback_index' => 'index.html'
+        ]);
+
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+
+        // Should return fallback index instead of secret content
+        $this->assertEquals('public content', $output);
+
+        // Cleanup
+        unlink($publicPath . '/index.html');
+        unlink($secretPath . '/secret.txt');
+        rmdir($publicPath);
+        rmdir($secretPath);
+        rmdir($basePath);
+    }
 }
