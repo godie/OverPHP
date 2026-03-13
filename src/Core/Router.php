@@ -57,7 +57,8 @@ final class Router
         if ($this->clientConfig['enabled'] && $this->clientConfig['path'] !== '') {
             $this->resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
             if ($this->resolvedClientPath !== null) {
-                $fallbackPath = $this->resolvedClientPath . DIRECTORY_SEPARATOR . $this->clientConfig['fallback_index'];
+                $this->resolvedClientPath = rtrim($this->resolvedClientPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+                $fallbackPath = $this->resolvedClientPath . $this->clientConfig['fallback_index'];
                 $this->resolvedFallbackPath = realpath($fallbackPath) ?: null;
             }
         }
@@ -232,8 +233,14 @@ final class Router
 
     private function serveFile(string $filePath): void
     {
-        $lastModified = filemtime($filePath);
-        $fileSize = filesize($filePath);
+        $stat = stat($filePath);
+        if ($stat === false) {
+            $this->sendError(404, 'Not Found');
+            return;
+        }
+
+        $lastModified = $stat['mtime'];
+        $fileSize = $stat['size'];
         $etag = sprintf('"%x-%x"', $lastModified, $fileSize);
 
         if (!headers_sent()) {
@@ -258,7 +265,7 @@ final class Router
 
     private function resolveControllerFqn(string $controller): string
     {
-        if (strpos($controller, 'OverPHP\\') === 0) {
+        if (str_starts_with($controller, 'OverPHP\\')) {
             return $controller;
         }
 

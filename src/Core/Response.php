@@ -72,8 +72,15 @@ final class Response
         $output = $data;
 
         if ($stats !== null) {
-            $output = (array) $data;
-            $output['_performance'] = $stats;
+            if (is_array($data)) {
+                $output = $data;
+                $output['_performance'] = $stats;
+            } else {
+                $output = [
+                    'data' => $data,
+                    '_performance' => $stats,
+                ];
+            }
         }
 
         try {
@@ -92,35 +99,31 @@ final class Response
             return false;
         }
 
-        $first = $string[0];
-        if ($first !== '{' && $first !== '[') {
-            if ($first !== ' ' && $first !== "\n" && $first !== "\r" && $first !== "\t") {
-                return false;
-            }
-            $string = ltrim($string);
-            if ($string === '') {
-                return false;
-            }
-            $first = $string[0];
-            if ($first !== '{' && $first !== '[') {
-                return false;
-            }
-        }
-
         if (function_exists('json_validate')) {
             return json_validate($string);
         }
 
-        $last = substr($string, -1);
-        if ($last !== '}' && $last !== ']') {
-            $string = rtrim($string);
-            $last = substr($string, -1);
+        $start = strspn($string, " \n\r\t");
+        if (!isset($string[$start])) {
+            return false;
         }
 
+        $first = $string[$start];
+        if ($first !== '{' && $first !== '[') {
+            return false;
+        }
+
+        $end = strlen($string) - 1;
+        while ($end > $start && str_contains(" \n\r\t", $string[$end])) {
+            $end--;
+        }
+
+        $last = $string[$end];
         if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
             json_decode($string);
             return json_last_error() === JSON_ERROR_NONE;
         }
+
         return false;
     }
 }

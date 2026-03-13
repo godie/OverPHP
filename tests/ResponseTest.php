@@ -31,4 +31,28 @@ final class ResponseTest extends TestCase
 
         $this->assertEquals('raw content', $output);
     }
+
+    public function testJsonSerializablePreservationWithBenchmarks(): void
+    {
+        \OverPHP\Core\Benchmark::start(true);
+
+        $data = new class implements \JsonSerializable {
+            public function jsonSerialize(): mixed {
+                return ['serialized' => true];
+            }
+        };
+
+        $response = Response::json($data);
+
+        ob_start();
+        $response->send();
+        $output = ob_get_clean();
+
+        $decoded = json_decode((string) $output, true);
+        $this->assertArrayHasKey('data', $decoded);
+        $this->assertEquals(['serialized' => true], $decoded['data']);
+        $this->assertArrayHasKey('_performance', $decoded);
+
+        \OverPHP\Core\Benchmark::start(false);
+    }
 }
