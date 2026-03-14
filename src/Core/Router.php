@@ -57,7 +57,9 @@ final class Router
         if ($this->clientConfig['enabled'] && $this->clientConfig['path'] !== '') {
             $this->resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
             if ($this->resolvedClientPath !== null) {
-                $fallbackPath = $this->resolvedClientPath . DIRECTORY_SEPARATOR . $this->clientConfig['fallback_index'];
+                // Append DIRECTORY_SEPARATOR to ensure str_starts_with is secure against sibling traversal
+                $this->resolvedClientPath .= DIRECTORY_SEPARATOR;
+                $fallbackPath = $this->resolvedClientPath . $this->clientConfig['fallback_index'];
                 $this->resolvedFallbackPath = realpath($fallbackPath) ?: null;
             }
         }
@@ -74,7 +76,7 @@ final class Router
             $this->routes[$method] = ['static' => [], 'dynamic' => []];
         }
 
-        if (strpos($path, '{') === false) {
+        if (!str_contains($path, '{')) {
             $this->routes[$method]['static'][$path] = [
                 'handler' => $handler,
                 'options' => $options,
@@ -95,13 +97,15 @@ final class Router
         $uri = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/';
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-        if ($this->clientConfig['enabled'] && !str_starts_with($uri, $this->prefix)) {
+        $hasPrefix = $this->prefix !== '' && str_starts_with($uri, $this->prefix);
+
+        if ($this->clientConfig['enabled'] && !$hasPrefix) {
             if ($this->serveClient($uri)) {
                 return;
             }
         }
 
-        if ($this->prefix !== '' && str_starts_with($uri, $this->prefix)) {
+        if ($hasPrefix) {
             $uri = substr($uri, strlen($this->prefix));
             if ($uri === '') {
                 $uri = '/';
@@ -163,7 +167,7 @@ final class Router
             return;
         }
 
-        if (is_string($handler) && strpos($handler, '@') !== false) {
+        if (is_string($handler) && str_contains($handler, '@')) {
             [$controller, $methodName] = explode('@', $handler, 2);
             $controllerClass = $this->resolveControllerFqn($controller);
 
@@ -209,7 +213,7 @@ final class Router
             return false;
         }
 
-        $filePath = $this->resolvedClientPath . $uri;
+        $filePath = $this->resolvedClientPath . ltrim($uri, '/');
 
         if (is_dir($filePath)) {
             $filePath = rtrim($filePath, '/') . '/' . $this->clientConfig['fallback_index'];
@@ -232,8 +236,12 @@ final class Router
 
     private function serveFile(string $filePath): void
     {
-        $lastModified = filemtime($filePath);
-        $fileSize = filesize($filePath);
+        $stat = @stat($filePath);
+        if ($stat === false) {
+            return;
+        }
+        $lastModified = $stat['mtime'];
+        $fileSize = $stat['size'];
         $etag = sprintf('"%x-%x"', $lastModified, $fileSize);
 
         if (!headers_sent()) {
@@ -258,7 +266,7 @@ final class Router
 
     private function resolveControllerFqn(string $controller): string
     {
-        if (strpos($controller, 'OverPHP\\') === 0) {
+        if (str_starts_with($controller, 'OverPHP\\')) {
             return $controller;
         }
 
