@@ -28,13 +28,13 @@ final class Router
     /** @var array<string, string> */
     private array $compiledRegex = [];
 
-    private string $controllerNamespace;
-    private string $prefix;
-    private ?Container $container;
+    private readonly string $controllerNamespace;
+    private readonly string $prefix;
+    private readonly ?Container $container;
     /** @var array{enabled:bool,path:string,fallback_index:string} */
-    private array $clientConfig;
-    private ?string $resolvedClientPath = null;
-    private ?string $resolvedFallbackPath = null;
+    private readonly array $clientConfig;
+    private readonly ?string $resolvedClientPath;
+    private readonly ?string $resolvedFallbackPath;
 
     /**
      * @param array{enabled?:bool,path?:string,fallback_index?:string} $clientConfig
@@ -54,15 +54,21 @@ final class Router
             'fallback_index' => 'index.html',
         ], $clientConfig);
 
+        $resolvedClientPath = null;
+        $resolvedFallbackPath = null;
+
         if ($this->clientConfig['enabled'] && $this->clientConfig['path'] !== '') {
-            $this->resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
-            if ($this->resolvedClientPath !== null) {
+            $resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
+            if ($resolvedClientPath !== null) {
                 // Append DIRECTORY_SEPARATOR to ensure str_starts_with is secure against sibling traversal
-                $this->resolvedClientPath .= DIRECTORY_SEPARATOR;
-                $fallbackPath = $this->resolvedClientPath . $this->clientConfig['fallback_index'];
-                $this->resolvedFallbackPath = realpath($fallbackPath) ?: null;
+                $resolvedClientPath .= DIRECTORY_SEPARATOR;
+                $fallbackPath = $resolvedClientPath . $this->clientConfig['fallback_index'];
+                $resolvedFallbackPath = realpath($fallbackPath) ?: null;
             }
         }
+
+        $this->resolvedClientPath = $resolvedClientPath;
+        $this->resolvedFallbackPath = $resolvedFallbackPath;
     }
 
     /**

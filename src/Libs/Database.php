@@ -21,12 +21,10 @@ final class Database
 
     private ?\PDO $connection = null;
     private ?string $lastError = null;
-    private array $config;
 
-    public function __construct(array $config = [])
-    {
-        $this->config = $config;
-    }
+    public function __construct(
+        private readonly array $config = []
+    ) {}
 
     // ── Driver registry ──────────────────────────────────────────
 
