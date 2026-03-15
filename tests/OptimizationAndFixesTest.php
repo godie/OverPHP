@@ -88,4 +88,33 @@ final class OptimizationAndFixesTest extends TestCase
         unlink($filePath);
         rmdir($clientPath);
     }
+
+    public function testJsonResponseWithBenchmarkPreservesDataStructure(): void
+    {
+        // Mock Benchmark start and enabled state
+        \OverPHP\Core\Benchmark::start(true);
+
+        $data = new class implements \JsonSerializable {
+            public function jsonSerialize(): array
+            {
+                return ['key' => 'value'];
+            }
+        };
+
+        $response = Response::json($data);
+
+        ob_start();
+        $response->send();
+        $output = ob_get_clean();
+
+        $decoded = json_decode((string) $output, true);
+
+        // Verify envelope pattern
+        $this->assertArrayHasKey('data', $decoded);
+        $this->assertArrayHasKey('_performance', $decoded);
+        $this->assertEquals(['key' => 'value'], $decoded['data']);
+
+        // Reset Benchmark
+        \OverPHP\Core\Benchmark::start(false);
+    }
 }
