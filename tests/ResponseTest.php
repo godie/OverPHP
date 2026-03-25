@@ -5,10 +5,16 @@ declare(strict_types=1);
 namespace OverPHP\Tests;
 
 use OverPHP\Core\Response;
+use OverPHP\Core\Benchmark;
 use PHPUnit\Framework\TestCase;
 
 final class ResponseTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        Benchmark::start(false); // Ensure benchmark is disabled by default
+    }
+
     public function testJsonResponse(): void
     {
         $response = Response::json(['success' => true]);

@@ -72,8 +72,10 @@ final class Response
         $output = $data;
 
         if ($stats !== null) {
-            $output = (array) $data;
-            $output['_performance'] = $stats;
+            $output = [
+                'data' => $data,
+                '_performance' => $stats,
+            ];
         }
 
         try {
@@ -88,43 +90,20 @@ final class Response
 
     private function isJson(string $string): bool
     {
-        $len = strlen($string);
-        if ($len === 0) {
-            return false;
-        }
-
-        // Find first non-whitespace character without ltrim()
-        $first = '';
-        $firstPos = 0;
-        for ($i = 0; $i < $len; $i++) {
-            $char = $string[$i];
-            if ($char !== ' ' && $char !== "\n" && $char !== "\r" && $char !== "\t") {
-                $first = $char;
-                $firstPos = $i;
-                break;
-            }
-        }
-
-        if ($first !== '{' && $first !== '[') {
-            return false;
-        }
-
         if (function_exists('json_validate')) {
             return json_validate($string);
         }
 
-        // Find last non-whitespace character without rtrim()
-        $last = '';
-        for ($i = $len - 1; $i >= $firstPos; $i--) {
-            $char = $string[$i];
-            if ($char !== ' ' && $char !== "\n" && $char !== "\r" && $char !== "\t") {
-                $last = $char;
-                break;
-            }
+        $trimmed = trim($string);
+        if ($trimmed === '') {
+            return false;
         }
 
+        $first = $trimmed[0];
+        $last = $trimmed[strlen($trimmed) - 1];
+
         if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
-            json_decode($string);
+            json_decode($trimmed);
             return json_last_error() === JSON_ERROR_NONE;
         }
 

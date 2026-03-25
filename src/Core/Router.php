@@ -246,7 +246,16 @@ final class Router
 
         if (!headers_sent()) {
             $extension = pathinfo($filePath, PATHINFO_EXTENSION);
-            $contentType = self::MIME_TYPES[$extension] ?? 'application/octet-stream';
+            $contentType = self::MIME_TYPES[$extension] ?? null;
+
+            if ($contentType === null && class_exists('finfo')) {
+                $finfo = new \finfo(FILEINFO_MIME_TYPE);
+                $contentType = $finfo->file($filePath) ?: null;
+            }
+
+            if ($contentType === null) {
+                $contentType = 'application/octet-stream';
+            }
 
             header('Content-Type: ' . $contentType);
             header('Cache-Control: public, max-age=3600');
