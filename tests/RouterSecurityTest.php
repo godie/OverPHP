@@ -25,6 +25,8 @@ final class RouterSecurityTest extends TestCase
         $this->siblingPath = $this->basePath . '/public_secret';
         mkdir($this->siblingPath);
         file_put_contents($this->siblingPath . '/config.php', 'secret data');
+
+        $_SERVER = [];
     }
 
     protected function tearDown(): void
@@ -34,6 +36,8 @@ final class RouterSecurityTest extends TestCase
         unlink($this->clientPath . '/index.html');
         rmdir($this->clientPath);
         rmdir($this->basePath);
+
+        $_SERVER = [];
     }
 
     public function testDirectoryTraversalToSiblingIsPrevented(): void

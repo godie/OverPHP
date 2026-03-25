@@ -72,8 +72,10 @@ final class Response
         $output = $data;
 
         if ($stats !== null) {
-            $output = (array) $data;
-            $output['_performance'] = $stats;
+            $output = [
+                'data' => $data,
+                '_performance' => $stats,
+            ];
         }
 
         try {

@@ -46,7 +46,7 @@ final class Router
         array $clientConfig = []
     ) {
         $this->controllerNamespace = rtrim($controllerNamespace, '\\');
-        $this->prefix = $prefix;
+        $this->prefix = rtrim($prefix, '/');
         $this->container = $container ?? Container::getInstance();
         $this->clientConfig = array_merge([
             'enabled' => false,
@@ -97,7 +97,9 @@ final class Router
         $uri = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/';
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-        $hasPrefix = $this->prefix !== '' && str_starts_with($uri, $this->prefix);
+        $hasPrefix = $this->prefix !== '' && (
+            $uri === $this->prefix || str_starts_with($uri, $this->prefix . '/')
+        );
 
         if ($this->clientConfig['enabled'] && !$hasPrefix) {
             if ($this->serveClient($uri)) {
@@ -200,7 +202,15 @@ final class Router
 
         $patterns = [];
         foreach ($this->routes[$method]['dynamic'] as $index => $route) {
-            $pattern = preg_replace('/\{[a-zA-Z0-9_]+\}/', '([^/]+)', $route['path']);
+            $parts = preg_split('/(\{[a-zA-Z0-9_]+\})/', $route['path'], -1, PREG_SPLIT_DELIM_CAPTURE);
+            $pattern = '';
+            foreach ($parts as $part) {
+                if (str_starts_with($part, '{') && str_ends_with($part, '}')) {
+                    $pattern .= '([^/]+)';
+                } else {
+                    $pattern .= preg_quote($part, '#');
+                }
+            }
             $patterns[] = $pattern . '(*MARK:' . $index . ')';
         }
 
