@@ -14,6 +14,7 @@ final class SecurityTest extends TestCase
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_destroy();
         }
+        $_SESSION = [];
     }
 
     public function testGenerateAndValidateCsrfToken(): void

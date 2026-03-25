@@ -16,6 +16,9 @@ final class Security
 
     private static ?bool $isSecureCache = null;
 
+    /** @var string Default Content Security Policy */
+    private static string $csp = "default-src 'self'; script-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; frame-ancestors 'none';";
+
     /**
      * Set whether CSRF protection is enabled.
      */
@@ -30,6 +33,14 @@ final class Security
     public static function isCsrfEnabled(): bool
     {
         return self::$csrfEnabled;
+    }
+
+    /**
+     * Set a custom Content Security Policy.
+     */
+    public static function setCsp(string $csp): void
+    {
+        self::$csp = $csp;
     }
 
     /**
@@ -113,7 +124,7 @@ final class Security
         header('Referrer-Policy: strict-origin-when-cross-origin');
 
         // Content Security Policy
-        header("Content-Security-Policy: default-src 'self'; script-src 'self'; object-src 'none'; frame-ancestors 'none';");
+        header("Content-Security-Policy: " . self::$csp);
 
         // HSTS (Strict-Transport-Security)
         if (self::isConnectionSecure()) {
@@ -140,7 +151,7 @@ final class Security
     /**
      * Helper method to determine if the current connection is secure (HTTPS).
      */
-    private static function isConnectionSecure(): bool
+    public static function isConnectionSecure(): bool
     {
         if (self::$isSecureCache !== null) {
             return self::$isSecureCache;
