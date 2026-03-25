@@ -17,7 +17,7 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
 
     spl_autoload_register(function (string $class): void {
         $prefix = 'OverPHP\\';
-        if (strncmp($prefix, $class, strlen($prefix)) !== 0) {
+        if (!str_starts_with($class, $prefix)) {
             return;
         }
 

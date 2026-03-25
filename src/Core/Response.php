@@ -12,9 +12,9 @@ final class Response
     private bool $isRaw = false;
 
     public function __construct(
-        private mixed $content,
-        private int $statusCode = 200,
-        private array $headers = []
+        private readonly mixed $content,
+        private readonly int $statusCode = 200,
+        private readonly array $headers = []
     ) {}
 
     public static function json(mixed $data, int $statusCode = 200): self
