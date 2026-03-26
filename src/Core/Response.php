@@ -12,9 +12,9 @@ final class Response
     private bool $isRaw = false;
 
     public function __construct(
-        private mixed $content,
-        private int $statusCode = 200,
-        private array $headers = []
+        private readonly mixed $content,
+        private readonly int $statusCode = 200,
+        private readonly array $headers = []
     ) {}
 
     public static function json(mixed $data, int $statusCode = 200): self
@@ -72,15 +72,10 @@ final class Response
         $output = $data;
 
         if ($stats !== null) {
-            if (is_array($data)) {
-                $output = $data;
-                $output['_performance'] = $stats;
-            } else {
-                $output = [
-                    'data' => $data,
-                    '_performance' => $stats,
-                ];
-            }
+            $output = [
+                'data' => $data,
+                '_performance' => $stats,
+            ];
         }
 
         try {
@@ -99,31 +94,29 @@ final class Response
             return false;
         }
 
+        // Prioridad: PHP 8.3+ (Extremadamente rápido y eficiente en memoria)
         if (function_exists('json_validate')) {
             return json_validate($string);
         }
 
-        $start = strspn($string, " \n\r\t");
-        if (!isset($string[$start])) {
+        // Fallback para PHP < 8.3
+        $trimmed = trim($string);
+
+        if ($trimmed === '') {
             return false;
         }
 
-        $first = $string[$start];
-        if ($first !== '{' && $first !== '[') {
-            return false;
-        }
+        $first = $trimmed[0];
+        $last = $trimmed[strlen($trimmed) - 1];
 
-        $end = strlen($string) - 1;
-        while ($end > $start && str_contains(" \n\r\t", $string[$end])) {
-            $end--;
-        }
-
-        $last = $string[$end];
+        // Solo intentamos decodificar si tiene estructura de objeto o array
         if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
-            json_decode($string);
+            json_decode($trimmed);
             return json_last_error() === JSON_ERROR_NONE;
         }
 
+        // Nota: El estándar JSON también permite escalares (strings entre comillas, números, true/false)
+        // Si necesitas validar eso, deberías quitar el IF anterior, pero suele dar falsos positivos.
         return false;
     }
 }

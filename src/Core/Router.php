@@ -28,13 +28,13 @@ final class Router
     /** @var array<string, string> */
     private array $compiledRegex = [];
 
-    private string $controllerNamespace;
-    private string $prefix;
-    private ?Container $container;
+    private readonly string $controllerNamespace;
+    private readonly string $prefix;
+    private readonly ?Container $container;
     /** @var array{enabled:bool,path:string,fallback_index:string} */
-    private array $clientConfig;
-    private ?string $resolvedClientPath = null;
-    private ?string $resolvedFallbackPath = null;
+    private readonly array $clientConfig;
+    private readonly ?string $resolvedClientPath;
+    private readonly ?string $resolvedFallbackPath;
 
     /**
      * @param array{enabled?:bool,path?:string,fallback_index?:string} $clientConfig
@@ -46,7 +46,7 @@ final class Router
         array $clientConfig = []
     ) {
         $this->controllerNamespace = rtrim($controllerNamespace, '\\');
-        $this->prefix = $prefix;
+        $this->prefix = rtrim($prefix, '/');
         $this->container = $container ?? Container::getInstance();
         $this->clientConfig = array_merge([
             'enabled' => false,
@@ -54,14 +54,21 @@ final class Router
             'fallback_index' => 'index.html',
         ], $clientConfig);
 
+        $resolvedClientPath = null;
+        $resolvedFallbackPath = null;
+
         if ($this->clientConfig['enabled'] && $this->clientConfig['path'] !== '') {
-            $this->resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
-            if ($this->resolvedClientPath !== null) {
-                $this->resolvedClientPath = rtrim($this->resolvedClientPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-                $fallbackPath = $this->resolvedClientPath . $this->clientConfig['fallback_index'];
-                $this->resolvedFallbackPath = realpath($fallbackPath) ?: null;
+            $resolvedClientPath = realpath($this->clientConfig['path']) ?: null;
+            if ($resolvedClientPath !== null) {
+                // Append DIRECTORY_SEPARATOR to ensure str_starts_with is secure against sibling traversal
+                $resolvedClientPath .= DIRECTORY_SEPARATOR;
+                $fallbackPath = $resolvedClientPath . $this->clientConfig['fallback_index'];
+                $resolvedFallbackPath = realpath($fallbackPath) ?: null;
             }
         }
+
+        $this->resolvedClientPath = $resolvedClientPath;
+        $this->resolvedFallbackPath = $resolvedFallbackPath;
     }
 
     /**
@@ -75,7 +82,7 @@ final class Router
             $this->routes[$method] = ['static' => [], 'dynamic' => []];
         }
 
-        if (strpos($path, '{') === false) {
+        if (!str_contains($path, '{')) {
             $this->routes[$method]['static'][$path] = [
                 'handler' => $handler,
                 'options' => $options,
@@ -96,13 +103,17 @@ final class Router
         $uri = strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/';
         $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
 
-        if ($this->clientConfig['enabled'] && !str_starts_with($uri, $this->prefix)) {
+        $hasPrefix = $this->prefix !== '' && (
+            $uri === $this->prefix || str_starts_with($uri, $this->prefix . '/')
+        );
+
+        if ($this->clientConfig['enabled'] && !$hasPrefix) {
             if ($this->serveClient($uri)) {
                 return;
             }
         }
 
-        if ($this->prefix !== '' && str_starts_with($uri, $this->prefix)) {
+        if ($hasPrefix) {
             $uri = substr($uri, strlen($this->prefix));
             if ($uri === '') {
                 $uri = '/';
@@ -164,7 +175,7 @@ final class Router
             return;
         }
 
-        if (is_string($handler) && strpos($handler, '@') !== false) {
+        if (is_string($handler) && str_contains($handler, '@')) {
             [$controller, $methodName] = explode('@', $handler, 2);
             $controllerClass = $this->resolveControllerFqn($controller);
 
@@ -197,7 +208,15 @@ final class Router
 
         $patterns = [];
         foreach ($this->routes[$method]['dynamic'] as $index => $route) {
-            $pattern = preg_replace('/\{[a-zA-Z0-9_]+\}/', '([^/]+)', $route['path']);
+            $parts = preg_split('/(\{[a-zA-Z0-9_]+\})/', $route['path'], -1, PREG_SPLIT_DELIM_CAPTURE);
+            $pattern = '';
+            foreach ($parts as $part) {
+                if (str_starts_with($part, '{') && str_ends_with($part, '}')) {
+                    $pattern .= '([^/]+)';
+                } else {
+                    $pattern .= preg_quote($part, '#');
+                }
+            }
             $patterns[] = $pattern . '(*MARK:' . $index . ')';
         }
 
@@ -210,7 +229,7 @@ final class Router
             return false;
         }
 
-        $filePath = $this->resolvedClientPath . $uri;
+        $filePath = $this->resolvedClientPath . ltrim($uri, '/');
 
         if (is_dir($filePath)) {
             $filePath = rtrim($filePath, '/') . '/' . $this->clientConfig['fallback_index'];
@@ -245,7 +264,16 @@ final class Router
 
         if (!headers_sent()) {
             $extension = pathinfo($filePath, PATHINFO_EXTENSION);
-            $contentType = self::MIME_TYPES[$extension] ?? 'application/octet-stream';
+            $contentType = self::MIME_TYPES[$extension] ?? null;
+
+            if ($contentType === null && class_exists('finfo')) {
+                $finfo = new \finfo(FILEINFO_MIME_TYPE);
+                $contentType = $finfo->file($filePath) ?: null;
+            }
+
+            if ($contentType === null) {
+                $contentType = 'application/octet-stream';
+            }
 
             header('Content-Type: ' . $contentType);
             header('Cache-Control: public, max-age=3600');
