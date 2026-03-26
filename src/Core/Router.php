@@ -252,10 +252,12 @@ final class Router
 
     private function serveFile(string $filePath): void
     {
-        $stat = @stat($filePath);
+        $stat = stat($filePath);
         if ($stat === false) {
+            $this->sendError(404, 'Not Found');
             return;
         }
+
         $lastModified = $stat['mtime'];
         $fileSize = $stat['size'];
         $etag = sprintf('"%x-%x"', $lastModified, $fileSize);

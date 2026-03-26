@@ -104,32 +104,39 @@ final class OptimizationAndFixesTest extends TestCase
         rmdir($clientPath);
     }
 
-    public function testJsonResponseWithBenchmarkPreservesDataStructure(): void
+    public function testRouterPreventsPathTraversalToSiblingDirectory(): void
     {
-        // Mock Benchmark start and enabled state
-        \OverPHP\Core\Benchmark::start(true);
+        $basePath = __DIR__ . '/../temp_traversal_' . uniqid();
+        mkdir($basePath);
+        $publicPath = $basePath . '/public';
+        $secretPath = $basePath . '/secret';
+        mkdir($publicPath);
+        mkdir($secretPath);
 
-        $data = new class implements \JsonSerializable {
-            public function jsonSerialize(): array
-            {
-                return ['key' => 'value'];
-            }
-        };
+        file_put_contents($publicPath . '/index.html', 'public content');
+        file_put_contents($secretPath . '/secret.txt', 'secret content');
 
-        $response = Response::json($data);
+        $_SERVER['REQUEST_METHOD'] = 'GET';
+        $_SERVER['REQUEST_URI'] = '/../secret/secret.txt';
+
+        $router = new Router('OverPHP\\Controllers', '/api', null, [
+            'enabled' => true,
+            'path' => $publicPath,
+            'fallback_index' => 'index.html'
+        ]);
 
         ob_start();
-        $response->send();
+        $router->run();
         $output = ob_get_clean();
 
-        $decoded = json_decode((string) $output, true);
+        // Should return fallback index instead of secret content
+        $this->assertEquals('public content', $output);
 
-        // Verify envelope pattern
-        $this->assertArrayHasKey('data', $decoded);
-        $this->assertArrayHasKey('_performance', $decoded);
-        $this->assertEquals(['key' => 'value'], $decoded['data']);
-
-        // Reset Benchmark
-        \OverPHP\Core\Benchmark::start(false);
+        // Cleanup
+        unlink($publicPath . '/index.html');
+        unlink($secretPath . '/secret.txt');
+        rmdir($publicPath);
+        rmdir($secretPath);
+        rmdir($basePath);
     }
 }

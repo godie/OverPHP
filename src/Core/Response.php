@@ -90,11 +90,18 @@ final class Response
 
     private function isJson(string $string): bool
     {
+        if ($string === '') {
+            return false;
+        }
+
+        // Prioridad: PHP 8.3+ (Extremadamente rápido y eficiente en memoria)
         if (function_exists('json_validate')) {
             return json_validate($string);
         }
 
+        // Fallback para PHP < 8.3
         $trimmed = trim($string);
+
         if ($trimmed === '') {
             return false;
         }
@@ -102,11 +109,14 @@ final class Response
         $first = $trimmed[0];
         $last = $trimmed[strlen($trimmed) - 1];
 
+        // Solo intentamos decodificar si tiene estructura de objeto o array
         if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
             json_decode($trimmed);
             return json_last_error() === JSON_ERROR_NONE;
         }
 
+        // Nota: El estándar JSON también permite escalares (strings entre comillas, números, true/false)
+        // Si necesitas validar eso, deberías quitar el IF anterior, pero suele dar falsos positivos.
         return false;
     }
 }
