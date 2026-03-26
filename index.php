@@ -9,6 +9,15 @@ use OverPHP\Core\Container;
 use OverPHP\Libs\Database;
 use function OverPHP\Helpers\corsSendHeaders;
 
+$config = file_exists(__DIR__ . '/config.php')
+    ? require __DIR__ . '/config.php'
+    : require __DIR__ . '/config.example.php';
+
+$controllerNamespace = rtrim((string) ($config['controller_namespace'] ?? 'OverPHP\\Controllers'), '\\');
+if ($controllerNamespace === '') {
+    $controllerNamespace = 'OverPHP\\Controllers';
+}
+
 if (file_exists(__DIR__ . '/vendor/autoload.php')) {
     require_once __DIR__ . '/vendor/autoload.php';
 } else {
@@ -27,30 +36,19 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
             require_once $file;
         }
     });
-
-    // Autoloader for custom controller namespace
-    spl_autoload_register(function (string $class): void {
-        $config = file_exists(__DIR__ . '/config.php')
-            ? require __DIR__ . '/config.php'
-            : require __DIR__ . '/config.example.php';
-            
-        $controllerNamespace = $config['controller_namespace'] ?? 'OverPHP\\Controllers';
-        
-        if (strncmp($controllerNamespace, $class, strlen($controllerNamespace)) !== 0) {
-            return;
-        }
-
-        $relative = str_replace('\\', '/', substr($class, strlen($controllerNamespace)));
-        $file = __DIR__ . '/src/Controllers/' . $relative . '.php';
-        if (is_file($file)) {
-            require_once $file;
-        }
-    });
 }
 
-$config = file_exists(__DIR__ . '/config.php')
-    ? require __DIR__ . '/config.php'
-    : require __DIR__ . '/config.example.php';
+spl_autoload_register(function (string $class) use ($controllerNamespace): void {
+    if ($class !== $controllerNamespace && !str_starts_with($class, $controllerNamespace . '\\')) {
+        return;
+    }
+
+    $relative = ltrim(substr($class, strlen($controllerNamespace)), '\\');
+    $file = __DIR__ . '/src/Controllers/' . str_replace('\\', '/', $relative) . '.php';
+    if (is_file($file)) {
+        require_once $file;
+    }
+});
 
 $container = Container::getInstance();
 $container->singleton(Database::class, function () use ($config) {
@@ -68,7 +66,7 @@ if (corsSendHeaders($config['allowed_origins'] ?? [])) {
 $routePrefix = (string) ($config['route_prefix'] ?? '/api');
 $clientConfig = (array) ($config['client'] ?? []);
 
-$router = new Router($config['controller_namespace'], $routePrefix, $container, $clientConfig);
+$router = new Router($controllerNamespace, $routePrefix, $container, $clientConfig);
 
 // Demo routes.
 $router->add('GET', '/', 'HelloController@index');
