@@ -252,6 +252,15 @@ final class Router
 
     private function serveFile(string $filePath): void
     {
+        $fileName = basename($filePath);
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+        // 🔐 Security: Block PHP files and hidden files (starting with dot)
+        if ($extension === 'php' || str_starts_with($fileName, '.')) {
+            $this->sendError(403, 'Forbidden');
+            return;
+        }
+
         $stat = stat($filePath);
         if ($stat === false) {
             $this->sendError(404, 'Not Found');
@@ -263,7 +272,6 @@ final class Router
         $etag = sprintf('"%x-%x"', $lastModified, $fileSize);
 
         if (!headers_sent()) {
-            $extension = pathinfo($filePath, PATHINFO_EXTENSION);
             $contentType = self::MIME_TYPES[$extension] ?? null;
 
             if ($contentType === null && class_exists('finfo')) {
