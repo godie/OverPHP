@@ -27,6 +27,25 @@ if (file_exists(__DIR__ . '/vendor/autoload.php')) {
             require_once $file;
         }
     });
+
+    // Autoloader for custom controller namespace
+    spl_autoload_register(function (string $class): void {
+        $config = file_exists(__DIR__ . '/config.php')
+            ? require __DIR__ . '/config.php'
+            : require __DIR__ . '/config.example.php';
+            
+        $controllerNamespace = $config['controller_namespace'] ?? 'OverPHP\\Controllers';
+        
+        if (strncmp($controllerNamespace, $class, strlen($controllerNamespace)) !== 0) {
+            return;
+        }
+
+        $relative = str_replace('\\', '/', substr($class, strlen($controllerNamespace)));
+        $file = __DIR__ . '/src/Controllers/' . $relative . '.php';
+        if (is_file($file)) {
+            require_once $file;
+        }
+    });
 }
 
 $config = file_exists(__DIR__ . '/config.php')
@@ -49,7 +68,7 @@ if (corsSendHeaders($config['allowed_origins'] ?? [])) {
 $routePrefix = (string) ($config['route_prefix'] ?? '/api');
 $clientConfig = (array) ($config['client'] ?? []);
 
-$router = new Router('OverPHP\\Controllers', $routePrefix, $container, $clientConfig);
+$router = new Router($config['controller_namespace'], $routePrefix, $container, $clientConfig);
 
 // Demo routes.
 $router->add('GET', '/', 'HelloController@index');

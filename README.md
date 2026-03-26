@@ -169,6 +169,7 @@ Copy `config.example.php` to `config.php` and edit, or use environment variables
 |-----|-----|---------|-------------|
 | `allowed_origins` | — | `['http://localhost:5173']` | CORS allowlist |
 | `route_prefix` | `API_PREFIX` | `/api` | API route prefix |
+| `controller_namespace` | `CONTROLLER_NAMESPACE` | `OverPHP\Controllers` | Controller namespace |
 
 ### Benchmark
 
@@ -282,6 +283,50 @@ final class MyController
 ```php
 $router->add('GET', '/my', 'MyController@index');
 ```
+
+## Custom Controller Namespace
+
+You can use your own namespace for controllers instead of the default `OverPHP\Controllers`. This is useful when integrating OverPHP into existing projects or when you prefer your own naming convention.
+
+### Using Environment Variable
+
+```bash
+export CONTROLLER_NAMESPACE="MyApp\\Controllers"
+```
+
+### Using Configuration File
+
+```php
+// config.php
+return [
+    'controller_namespace' => 'MyApp\\Controllers',
+    // ... other config
+];
+```
+
+### Controller Example with Custom Namespace
+
+```php
+<?php
+declare(strict_types=1);
+
+namespace MyApp\Controllers;
+
+final class UserController
+{
+    public function index(): array
+    {
+        return ['users' => []];
+    }
+    
+    public function show(string $id): array
+    {
+        return ['user_id' => $id];
+    }
+}
+```
+
+The controller files should still be placed in `src/Controllers/` directory, but you can use your preferred namespace in the class declarations.
 
 ## License
 
