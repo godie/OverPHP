@@ -17,6 +17,7 @@ final class ResponseTest extends TestCase
 
     public function testJsonResponse(): void
     {
+        \OverPHP\Core\Benchmark::start(false);
         $response = Response::json(['success' => true]);
 
         ob_start();

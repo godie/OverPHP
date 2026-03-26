@@ -39,6 +39,7 @@ final class RouterSecurityTest extends TestCase
         @unlink($this->clientPath . '/index.html');
         @rmdir($this->clientPath);
         @rmdir($this->basePath);
+        $_SERVER = [];
     }
 
     public function testDirectoryTraversalToSiblingIsPrevented(): void

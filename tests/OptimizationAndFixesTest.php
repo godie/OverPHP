@@ -22,6 +22,13 @@ final class OptimizationAndFixesTest extends TestCase
         $_SERVER = [];
     }
 
+    protected function tearDown(): void
+    {
+        $_SERVER = [];
+        $_POST = [];
+        $_SESSION = [];
+    }
+
     public function testRawResponseIsNotEscaped(): void
     {
         $content = '<h1>Hello World</h1>';
@@ -36,6 +43,8 @@ final class OptimizationAndFixesTest extends TestCase
 
     public function testRouterAcceptsXXSRFToken(): void
     {
+        \OverPHP\Core\Benchmark::start(false);
+        $token = Security::generateCsrfToken();
         Security::setCsrfEnabled(false);
 
         $_SERVER['REQUEST_METHOD'] = 'POST';
