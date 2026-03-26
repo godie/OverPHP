@@ -99,19 +99,34 @@ final class Response
             return json_validate($string);
         }
 
-        // Fallback para PHP < 8.3
-        $trimmed = trim($string);
+        // Fallback para PHP < 8.3: Evitamos trim() para no duplicar memoria en strings grandes
+        $len = strlen($string);
+        $firstPos = 0;
+        while ($firstPos < $len && ctype_space($string[$firstPos])) {
+            $firstPos++;
+        }
 
-        if ($trimmed === '') {
+        if ($firstPos === $len) {
             return false;
         }
 
-        $first = $trimmed[0];
-        $last = $trimmed[strlen($trimmed) - 1];
+        $lastPos = $len - 1;
+        while ($lastPos > $firstPos && ctype_space($string[$lastPos])) {
+            $lastPos--;
+        }
+
+        $first = $string[$firstPos];
+        $last = $string[$lastPos];
 
         // Solo intentamos decodificar si tiene estructura de objeto o array
         if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
-            json_decode($trimmed);
+            // Si es un substring, lamentablemente json_decode requiere el string completo
+            // pero al menos solo llamamos a substr si parece ser JSON
+            $candidate = ($firstPos === 0 && $lastPos === $len - 1)
+                ? $string
+                : substr($string, $firstPos, $lastPos - $firstPos + 1);
+
+            json_decode($candidate);
             return json_last_error() === JSON_ERROR_NONE;
         }
 
