@@ -46,20 +46,37 @@ final class Response
             return;
         }
 
+        $isJsonIntent = $this->isJsonContentType();
+
         if (is_array($this->content) || is_object($this->content)) {
             $this->sendJson($this->content, $headersSent);
             return;
         }
 
         if (is_string($this->content) && $this->isJson($this->content)) {
-            if (!$headersSent) {
+            if (!$headersSent && !$isJsonIntent) {
                 header('Content-Type: application/json; charset=utf-8');
             }
             echo $this->content;
             return;
         }
 
+        if ($isJsonIntent) {
+            $this->sendJson($this->content, $headersSent);
+            return;
+        }
+
         echo is_string($this->content) ? Security::escape($this->content) : (string) $this->content;
+    }
+
+    private function isJsonContentType(): bool
+    {
+        foreach ($this->headers as $name => $value) {
+            if (strtolower($name) === 'content-type' && str_contains(strtolower($value), 'application/json')) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private function sendJson(mixed $data, bool $headersSent): void

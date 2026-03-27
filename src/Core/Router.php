@@ -28,6 +28,8 @@ final class Router
     /** @var array<string, string> */
     private array $compiledRegex = [];
 
+    private static ?\finfo $finfo = null;
+
     private readonly string $controllerNamespace;
     private readonly string $prefix;
     private readonly ?Container $container;
@@ -272,11 +274,21 @@ final class Router
         $etag = sprintf('"%x-%x"', $lastModified, $fileSize);
 
         if (!headers_sent()) {
+            header('Cache-Control: public, max-age=3600');
+            header('ETag: ' . $etag);
+            header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastModified) . ' GMT');
+
+            $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
+            if ($ifNoneMatch !== '' && trim($ifNoneMatch, '" ') === trim($etag, '" ')) {
+                http_response_code(304);
+                return;
+            }
+
             $contentType = self::MIME_TYPES[$extension] ?? null;
 
             if ($contentType === null && class_exists('finfo')) {
-                $finfo = new \finfo(FILEINFO_MIME_TYPE);
-                $contentType = $finfo->file($filePath) ?: null;
+                self::$finfo ??= new \finfo(FILEINFO_MIME_TYPE);
+                $contentType = self::$finfo->file($filePath) ?: null;
             }
 
             if ($contentType === null) {
@@ -284,16 +296,7 @@ final class Router
             }
 
             header('Content-Type: ' . $contentType);
-            header('Cache-Control: public, max-age=3600');
-            header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $lastModified) . ' GMT');
-            header('ETag: ' . $etag);
             header('Content-Length: ' . $fileSize);
-
-            $ifNoneMatch = $_SERVER['HTTP_IF_NONE_MATCH'] ?? '';
-            if ($ifNoneMatch !== '' && trim($ifNoneMatch, '" ') === trim($etag, '" ')) {
-                http_response_code(304);
-                return;
-            }
         }
 
         readfile($filePath);
@@ -301,7 +304,7 @@ final class Router
 
     private function resolveControllerFqn(string $controller): string
     {
-        if (str_starts_with($controller, 'OverPHP\\')) {
+        if (str_starts_with($controller, '\\') || str_starts_with($controller, 'OverPHP\\')) {
             return $controller;
         }
 
