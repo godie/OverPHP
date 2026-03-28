@@ -57,7 +57,7 @@ $container->singleton(Database::class, function () use ($config) {
 
 Benchmark::start((bool) ($config['benchmark']['enabled'] ?? false));
 Security::sendSecurityHeaders();
-Security::setCsrfEnabled((bool) ($config['security']['csrf_enabled'] ?? true));
+Security::setCsrfEnabled((bool) ($config['security']['csrf_enabled'] ?? false));
 
 if (corsSendHeaders($config['allowed_origins'] ?? [])) {
     return;

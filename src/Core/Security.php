@@ -12,7 +12,7 @@ final class Security
 {
     private const CSRF_TOKEN_NAME = '_csrf_token';
 
-    private static bool $csrfEnabled = true;
+    private static bool $csrfEnabled = false;
 
     private static ?bool $isSecureCache = null;
 
