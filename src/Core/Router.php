@@ -260,8 +260,9 @@ final class Router
         $fileName = basename($filePath);
         $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
 
-        // 🔐 Security: Block PHP files and hidden files (starting with dot)
-        if ($extension === 'php' || str_starts_with($fileName, '.')) {
+        // 🔐 Security: Block PHP files, sensitive extensions and hidden files (starting with dot)
+        $blockedExtensions = ['php', 'bak', 'sql', 'log', 'old', 'save'];
+        if (in_array($extension, $blockedExtensions, true) || str_contains($fileName, '.php.') || str_starts_with($fileName, '.')) {
             $this->sendError(403, 'Forbidden');
             return;
         }
@@ -300,6 +301,10 @@ final class Router
 
             header('Content-Type: ' . $contentType);
             header('Content-Length: ' . $fileSize);
+        }
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+            return;
         }
 
         readfile($filePath);

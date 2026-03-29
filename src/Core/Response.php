@@ -48,7 +48,7 @@ final class Response
 
         $isJsonIntent = $this->isJsonContentType();
 
-        if (is_array($this->content) || is_object($this->content)) {
+        if (is_array($this->content) || is_object($this->content) || is_bool($this->content) || is_int($this->content) || is_float($this->content) || $this->content === null) {
             $this->sendJson($this->content, $headersSent);
             return;
         }
