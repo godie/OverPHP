@@ -123,15 +123,35 @@ final class Container
         foreach ($dependencies as $dependency) {
             $type = $dependency->getType();
 
-            if (!$type instanceof \ReflectionNamedType || $type->isBuiltin()) {
-                if ($dependency->isDefaultValueAvailable()) {
-                    $results[] = $dependency->getDefaultValue();
-                    continue;
-                }
-                throw new \Exception("Unable to resolve dependency {$dependency->getName()}.");
+            // Handle named types (classes/interfaces)
+            if ($type instanceof \ReflectionNamedType && !$type->isBuiltin()) {
+                $results[] = $this->make($type->getName());
+                continue;
             }
 
-            $results[] = $this->make($type->getName());
+            // Handle Union and Intersection types (PHP 8.1+)
+            if ($type instanceof \ReflectionUnionType || $type instanceof \ReflectionIntersectionType) {
+                $resolved = false;
+                foreach ($type->getTypes() as $subType) {
+                    if ($subType instanceof \ReflectionNamedType && !$subType->isBuiltin()) {
+                        $results[] = $this->make($subType->getName());
+                        $resolved = true;
+                        break;
+                    }
+                }
+                if ($resolved) {
+                    continue;
+                }
+            }
+
+            if ($dependency->isDefaultValueAvailable()) {
+                $results[] = $dependency->getDefaultValue();
+                continue;
+            }
+
+            $className = $dependency->getDeclaringClass()?->getName() ?? 'unknown';
+            $methodName = $dependency->getDeclaringFunction()->getName();
+            throw new \Exception("Unable to resolve dependency [\${$dependency->getName()}] in {$className}::{$methodName}.");
         }
 
         return $results;

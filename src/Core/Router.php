@@ -20,6 +20,9 @@ final class Router
         'webp' => 'image/webp',
         'txt'  => 'text/plain',
         'pdf'  => 'application/pdf',
+        'woff' => 'font/woff',
+        'woff2'=> 'font/woff2',
+        'ttf'  => 'font/ttf',
     ];
 
     /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, params:array<string>}>}> */
@@ -172,7 +175,7 @@ final class Router
     private function handleRoute(mixed $handler, array $params = []): void
     {
         if (is_callable($handler)) {
-            $response = $handler(...array_values($params));
+            $response = $handler(...$params);
             $this->emitResponse($response);
             return;
         }
@@ -192,7 +195,7 @@ final class Router
                 return;
             }
 
-            $response = $instance->$methodName(...array_values($params));
+            $response = $instance->$methodName(...$params);
             $this->emitResponse($response);
             return;
         }
