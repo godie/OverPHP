@@ -60,4 +60,48 @@ final class RouterSecurityTest extends TestCase
         $this->assertNotEquals('secret data', $output);
         $this->assertEquals('public index', $output);
     }
+
+    public function testBlockedExtensionsReturnForbidden(): void
+    {
+        $router = new Router('OverPHP\\Controllers', '/api', null, [
+            'enabled' => true,
+            'path' => $this->clientPath,
+            'fallback_index' => 'index.html'
+        ]);
+
+        $files = ['test.bak', 'test.sql', 'test.log', 'test.old', 'test.save', 'config.php.bak'];
+        foreach ($files as $file) {
+            file_put_contents($this->clientPath . '/' . $file, 'sensitive content');
+            $_SERVER['REQUEST_METHOD'] = 'GET';
+            $_SERVER['REQUEST_URI'] = '/' . $file;
+
+            ob_start();
+            $router->run();
+            $output = ob_get_clean();
+
+            $this->assertEquals(403, http_response_code(), "Expected 403 for $file");
+            $this->assertStringContainsString('Forbidden', $output);
+            unlink($this->clientPath . '/' . $file);
+        }
+    }
+
+    public function testHeadRequestSendsNoBody(): void
+    {
+        $router = new Router('OverPHP\\Controllers', '/api', null, [
+            'enabled' => true,
+            'path' => $this->clientPath,
+            'fallback_index' => 'index.html'
+        ]);
+
+        file_put_contents($this->clientPath . '/test.txt', 'some content');
+        $_SERVER['REQUEST_METHOD'] = 'HEAD';
+        $_SERVER['REQUEST_URI'] = '/test.txt';
+
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+
+        $this->assertEquals('', $output);
+        unlink($this->clientPath . '/test.txt');
+    }
 }

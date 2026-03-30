@@ -76,6 +76,13 @@ final class Response
                 return true;
             }
         }
+
+        foreach (headers_list() as $header) {
+            if (str_starts_with(strtolower($header), 'content-type:') && str_contains(strtolower($header), 'application/json')) {
+                return true;
+            }
+        }
+
         return false;
     }
 
