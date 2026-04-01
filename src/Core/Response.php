@@ -77,9 +77,11 @@ final class Response
             }
         }
 
-        foreach (headers_list() as $header) {
-            if (str_starts_with(strtolower($header), 'content-type:') && str_contains(strtolower($header), 'application/json')) {
-                return true;
+        if (function_exists('headers_list')) {
+            foreach (headers_list() as $header) {
+                if (stripos($header, 'Content-Type:') === 0 && stripos($header, 'application/json') !== false) {
+                    return true;
+                }
             }
         }
 
@@ -142,20 +144,20 @@ final class Response
         $first = $string[$firstPos];
         $last = $string[$lastPos];
 
-        // Solo intentamos decodificar si tiene estructura de objeto o array
-        if (($first === '{' && $last === '}') || ($first === '[' && $last === ']')) {
-            // Si es un substring, lamentablemente json_decode requiere el string completo
-            // pero al menos solo llamamos a substr si parece ser JSON
-            $candidate = ($firstPos === 0 && $lastPos === $len - 1)
-                ? $string
-                : substr($string, $firstPos, $lastPos - $firstPos + 1);
+        // Solo intentamos decodificar si tiene estructura de objeto, array o es un escalar común (true, false, null, número, string entre comillas)
+        $candidate = substr($string, $firstPos, $lastPos - $firstPos + 1);
 
+        $isPossibleJson = ($first === '{' && $last === '}') ||
+            ($first === '[' && $last === ']') ||
+            ($first === '"' && $last === '"') ||
+            in_array($candidate, ['true', 'false', 'null'], true) ||
+            is_numeric($candidate);
+
+        if ($isPossibleJson) {
             json_decode($candidate);
             return json_last_error() === JSON_ERROR_NONE;
         }
 
-        // Nota: El estándar JSON también permite escalares (strings entre comillas, números, true/false)
-        // Si necesitas validar eso, deberías quitar el IF anterior, pero suele dar falsos positivos.
         return false;
     }
 }

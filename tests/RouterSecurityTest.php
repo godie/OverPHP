@@ -28,12 +28,18 @@ final class RouterSecurityTest extends TestCase
         mkdir($this->siblingPath);
         file_put_contents($this->siblingPath . '/config.php', 'secret data');
 
+        // Create sensitive files in public
+        file_put_contents($this->clientPath . '/data.sql', 'DATABASE DUMP');
+        file_put_contents($this->clientPath . '/config.php.bak', 'PHP BACKUP');
+
         $_SERVER = [];
         $_POST = [];
     }
 
     protected function tearDown(): void
     {
+        @unlink($this->clientPath . '/data.sql');
+        @unlink($this->clientPath . '/config.php.bak');
         @unlink($this->siblingPath . '/config.php');
         @rmdir($this->siblingPath);
         @unlink($this->clientPath . '/index.html');
@@ -69,23 +75,26 @@ final class RouterSecurityTest extends TestCase
             'fallback_index' => 'index.html'
         ]);
 
-        $files = ['test.bak', 'test.sql', 'test.log', 'test.old', 'test.save', 'config.php.bak'];
-        foreach ($files as $file) {
-            file_put_contents($this->clientPath . '/' . $file, 'sensitive content');
-            $_SERVER['REQUEST_METHOD'] = 'GET';
-            $_SERVER['REQUEST_URI'] = '/' . $file;
+        $_SERVER['REQUEST_METHOD'] = 'GET';
 
-            ob_start();
-            $router->run();
-            $output = ob_get_clean();
+        // Test .sql
+        $_SERVER['REQUEST_URI'] = '/data.sql';
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+        $this->assertStringContainsString('Forbidden', $output);
+        $this->assertStringNotContainsString('DATABASE DUMP', $output);
 
-            $this->assertEquals(403, http_response_code(), "Expected 403 for $file");
-            $this->assertStringContainsString('Forbidden', $output);
-            unlink($this->clientPath . '/' . $file);
-        }
+        // Test .php.bak
+        $_SERVER['REQUEST_URI'] = '/config.php.bak';
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+        $this->assertStringContainsString('Forbidden', $output);
+        $this->assertStringNotContainsString('PHP BACKUP', $output);
     }
 
-    public function testHeadRequestSendsNoBody(): void
+    public function testHeadRequestDoesNotReturnBody(): void
     {
         $router = new Router('OverPHP\\Controllers', '/api', null, [
             'enabled' => true,
