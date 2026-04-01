@@ -314,7 +314,9 @@ final class Router
 
     private function resolveControllerFqn(string $controller): string
     {
-        if (str_starts_with($controller, '\\') || str_starts_with($controller, 'OverPHP\\')) {
+        if (str_starts_with($controller, '\\') ||
+            str_starts_with($controller, 'OverPHP\\') ||
+            str_starts_with($controller, $this->controllerNamespace)) {
             return $controller;
         }
 
