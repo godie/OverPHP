@@ -313,6 +313,10 @@ final class Router
             return;
         }
 
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+            return;
+        }
+
         readfile($filePath);
     }
 
