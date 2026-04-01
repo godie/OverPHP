@@ -303,6 +303,10 @@ final class Router
 
             header('Content-Type: ' . $contentType);
             header('Content-Length: ' . $fileSize);
+
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+                return;
+            }
         }
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
@@ -316,7 +320,7 @@ final class Router
     {
         if (str_starts_with($controller, '\\') ||
             str_starts_with($controller, 'OverPHP\\') ||
-            str_starts_with($controller, $this->controllerNamespace)) {
+            str_starts_with($controller, $this->controllerNamespace . '\\')) {
             return $controller;
         }
 

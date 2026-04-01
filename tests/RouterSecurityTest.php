@@ -67,7 +67,7 @@ final class RouterSecurityTest extends TestCase
         $this->assertEquals('public index', $output);
     }
 
-    public function testSensitiveFilesAreBlocked(): void
+    public function testBlockedExtensionsReturnForbidden(): void
     {
         $router = new Router('OverPHP\\Controllers', '/api', null, [
             'enabled' => true,
@@ -102,13 +102,15 @@ final class RouterSecurityTest extends TestCase
             'fallback_index' => 'index.html'
         ]);
 
+        file_put_contents($this->clientPath . '/test.txt', 'some content');
         $_SERVER['REQUEST_METHOD'] = 'HEAD';
-        $_SERVER['REQUEST_URI'] = '/index.html';
+        $_SERVER['REQUEST_URI'] = '/test.txt';
 
         ob_start();
         $router->run();
         $output = ob_get_clean();
 
-        $this->assertEmpty($output);
+        $this->assertEquals('', $output);
+        unlink($this->clientPath . '/test.txt');
     }
 }

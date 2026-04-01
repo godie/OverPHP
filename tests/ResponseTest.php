@@ -115,4 +115,27 @@ final class ResponseTest extends TestCase
         // Verificamos que la función isJson fue capaz de ver a través de los caracteres especiales
         $this->assertEquals($jsonData, $output);
     }
+
+    /**
+     * Test para verificar que los escalares se serializan a JSON cuando el intent es JSON
+     */
+    public function testScalarSerializationWithJsonIntent(): void
+    {
+        // En CLI header() no funciona para headers_list(), así que usamos el header del Response object
+        // para probar la misma lógica interna de detección de JSON intent.
+
+        $response = new Response(true, 200, ['Content-Type' => 'application/json']);
+        ob_start();
+        $response->send();
+        $output = ob_get_clean();
+
+        $this->assertEquals('true', $output);
+
+        $response2 = new Response(null, 200, ['Content-Type' => 'application/json']);
+        ob_start();
+        $response2->send();
+        $output2 = ob_get_clean();
+
+        $this->assertEquals('null', $output2);
+    }
 }
