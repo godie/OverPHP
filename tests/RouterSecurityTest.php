@@ -28,12 +28,18 @@ final class RouterSecurityTest extends TestCase
         mkdir($this->siblingPath);
         file_put_contents($this->siblingPath . '/config.php', 'secret data');
 
+        // Create sensitive files in public
+        file_put_contents($this->clientPath . '/data.sql', 'DATABASE DUMP');
+        file_put_contents($this->clientPath . '/config.php.bak', 'PHP BACKUP');
+
         $_SERVER = [];
         $_POST = [];
     }
 
     protected function tearDown(): void
     {
+        @unlink($this->clientPath . '/data.sql');
+        @unlink($this->clientPath . '/config.php.bak');
         @unlink($this->siblingPath . '/config.php');
         @rmdir($this->siblingPath);
         @unlink($this->clientPath . '/index.html');
@@ -59,5 +65,52 @@ final class RouterSecurityTest extends TestCase
 
         $this->assertNotEquals('secret data', $output);
         $this->assertEquals('public index', $output);
+    }
+
+    public function testBlockedExtensionsReturnForbidden(): void
+    {
+        $router = new Router('OverPHP\\Controllers', '/api', null, [
+            'enabled' => true,
+            'path' => $this->clientPath,
+            'fallback_index' => 'index.html'
+        ]);
+
+        $_SERVER['REQUEST_METHOD'] = 'GET';
+
+        // Test .sql
+        $_SERVER['REQUEST_URI'] = '/data.sql';
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+        $this->assertStringContainsString('Forbidden', $output);
+        $this->assertStringNotContainsString('DATABASE DUMP', $output);
+
+        // Test .php.bak
+        $_SERVER['REQUEST_URI'] = '/config.php.bak';
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+        $this->assertStringContainsString('Forbidden', $output);
+        $this->assertStringNotContainsString('PHP BACKUP', $output);
+    }
+
+    public function testHeadRequestDoesNotReturnBody(): void
+    {
+        $router = new Router('OverPHP\\Controllers', '/api', null, [
+            'enabled' => true,
+            'path' => $this->clientPath,
+            'fallback_index' => 'index.html'
+        ]);
+
+        file_put_contents($this->clientPath . '/test.txt', 'some content');
+        $_SERVER['REQUEST_METHOD'] = 'HEAD';
+        $_SERVER['REQUEST_URI'] = '/test.txt';
+
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+
+        $this->assertEquals('', $output);
+        unlink($this->clientPath . '/test.txt');
     }
 }

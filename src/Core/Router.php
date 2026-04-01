@@ -260,9 +260,11 @@ final class Router
         $fileName = basename($filePath);
         $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
 
-        // 🔐 Security: Block PHP files, sensitive extensions and hidden files (starting with dot)
+        // 🔐 Security: Block PHP files, sensitive extensions and hidden files
         $blockedExtensions = ['php', 'bak', 'sql', 'log', 'old', 'save'];
-        if (in_array($extension, $blockedExtensions, true) || str_contains($fileName, '.php.') || str_starts_with($fileName, '.')) {
+        if (in_array($extension, $blockedExtensions, true) ||
+            str_contains($fileName, '.php.') ||
+            str_starts_with($fileName, '.')) {
             $this->sendError(403, 'Forbidden');
             return;
         }
@@ -301,6 +303,14 @@ final class Router
 
             header('Content-Type: ' . $contentType);
             header('Content-Length: ' . $fileSize);
+
+            if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+                return;
+            }
+        }
+
+        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
+            return;
         }
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
@@ -312,7 +322,9 @@ final class Router
 
     private function resolveControllerFqn(string $controller): string
     {
-        if (str_starts_with($controller, '\\') || str_starts_with($controller, 'OverPHP\\')) {
+        if (str_starts_with($controller, '\\') ||
+            str_starts_with($controller, 'OverPHP\\') ||
+            str_starts_with($controller, $this->controllerNamespace . '\\')) {
             return $controller;
         }
 
