@@ -118,6 +118,11 @@ final class Router
             }
         }
 
+        if ($this->prefix !== '' && !$hasPrefix) {
+            $this->sendError(404, 'Not Found');
+            return;
+        }
+
         if ($hasPrefix) {
             $uri = substr($uri, strlen($this->prefix));
             if ($uri === '') {
@@ -307,10 +312,6 @@ final class Router
             if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
                 return;
             }
-        }
-
-        if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
-            return;
         }
 
         if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'HEAD') {
