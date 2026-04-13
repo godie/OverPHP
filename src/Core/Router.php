@@ -239,6 +239,15 @@ final class Router
             return false;
         }
 
+        // 🔐 Security: Block hidden files and directories (starting with .)
+        // We allow '.' and '..' for SPA fallback traversal tests to remain consistent with existing framework behavior
+        foreach (explode('/', $uri) as $segment) {
+            if (str_starts_with($segment, '.') && $segment !== '.' && $segment !== '..') {
+                $this->sendError(403, 'Forbidden');
+                return true;
+            }
+        }
+
         $filePath = $this->resolvedClientPath . ltrim($uri, '/');
 
         if (is_dir($filePath)) {
