@@ -47,6 +47,44 @@ final class RouterTest extends TestCase
         $this->assertEquals('123', $decoded['id']);
     }
 
+    public function testRouterCastsConstrainedIntegerParameter(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/api/user/123';
+        $_SERVER['REQUEST_METHOD'] = 'GET';
+
+        $router = new Router('OverPHP\\Controllers', '/api');
+        $router->add('GET', '/user/{id:\\d+}', function (int $id): array {
+            return ['id' => $id, 'type' => gettype($id)];
+        }, ['types' => ['id' => 'int']]);
+
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+
+        $decoded = json_decode((string) $output, true);
+        $this->assertSame(123, $decoded['id']);
+        $this->assertSame('integer', $decoded['type']);
+    }
+
+    public function testRouterRejectsInvalidConstrainedParameter(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/api/user/not-a-number';
+        $_SERVER['REQUEST_METHOD'] = 'GET';
+
+        $router = new Router('OverPHP\\Controllers', '/api');
+        $router->add('GET', '/user/{id:\\d+}', function (int $id): array {
+            return ['id' => $id];
+        }, ['types' => ['id' => 'int']]);
+
+        ob_start();
+        $router->run();
+        $output = ob_get_clean();
+
+        $decoded = json_decode((string) $output, true);
+        $this->assertIsArray($decoded);
+        $this->assertSame('Not Found', $decoded['error']);
+    }
+
     public function testRouterPreventsDoubleResponseOnControllerNotFound(): void
     {
         $_SERVER['REQUEST_URI'] = '/api/missing';

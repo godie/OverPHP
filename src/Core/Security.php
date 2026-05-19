@@ -78,12 +78,25 @@ final class Security
     {
         self::startSecureSession();
 
-        if (isset($_SESSION[self::CSRF_TOKEN_NAME])) {
+        if (isset($_SESSION[self::CSRF_TOKEN_NAME]) && is_string($_SESSION[self::CSRF_TOKEN_NAME])) {
             return (string) $_SESSION[self::CSRF_TOKEN_NAME];
         }
 
         $token = bin2hex(random_bytes(32));
         $_SESSION[self::CSRF_TOKEN_NAME] = $token;
+        return $token;
+    }
+
+    /**
+     * Rotate the CSRF token after trust-boundary changes such as login/logout.
+     */
+    public static function rotateCsrfToken(): string
+    {
+        self::startSecureSession();
+
+        $token = bin2hex(random_bytes(32));
+        $_SESSION[self::CSRF_TOKEN_NAME] = $token;
+
         return $token;
     }
 
@@ -95,11 +108,33 @@ final class Security
         self::startSecureSession();
         $storedToken = $_SESSION[self::CSRF_TOKEN_NAME] ?? null;
 
-        if ($storedToken === null || $token === null) {
+        if (!is_string($storedToken) || $storedToken === '' || $token === null || $token === '') {
             return false;
         }
 
         return hash_equals($storedToken, $token);
+    }
+
+    /**
+     * Extract a CSRF token from supported headers or form field.
+     */
+    public static function csrfTokenFromRequest(): ?string
+    {
+        $headers = function_exists('getallheaders') ? getallheaders() : [];
+
+        $token = $_SERVER['HTTP_X_CSRF_TOKEN']
+            ?? $_SERVER['HTTP_X_XSRF_TOKEN']
+            ?? $headers['X-CSRF-TOKEN']
+            ?? $headers['X-XSRF-TOKEN']
+            ?? $_POST[self::CSRF_TOKEN_NAME]
+            ?? null;
+
+        return is_string($token) ? $token : null;
+    }
+
+    public static function shouldValidateCsrf(string $method): bool
+    {
+        return in_array(strtoupper($method), ['POST', 'PUT', 'PATCH', 'DELETE'], true);
     }
 
     /**
@@ -137,7 +172,59 @@ final class Security
      */
     public static function escape(string $data): string
     {
-        return htmlspecialchars($data, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return self::escapeHtml($data);
+    }
+
+    public static function escapeHtml(string $data): string
+    {
+        return htmlspecialchars($data, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8', false);
+    }
+
+    public static function escapeAttribute(string $data): string
+    {
+        return htmlspecialchars($data, ENT_QUOTES | ENT_SUBSTITUTE | ENT_HTML5, 'UTF-8', false);
+    }
+
+    public static function escapeJsString(string $data): string
+    {
+        return json_encode(
+            $data,
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
+        );
+    }
+
+    public static function escapeUrl(string $data): string
+    {
+        $data = trim($data);
+
+        if (!self::isSafeUrl($data)) {
+            return '#';
+        }
+
+        return self::escapeAttribute($data);
+    }
+
+    public static function isSafeUrl(string $data): bool
+    {
+        if ($data === '') {
+            return false;
+        }
+
+        if (str_starts_with($data, '/') && !str_starts_with($data, '//')) {
+            return true;
+        }
+
+        $scheme = strtolower((string) parse_url($data, PHP_URL_SCHEME));
+
+        return in_array($scheme, ['http', 'https', 'mailto', 'tel'], true);
+    }
+
+    /**
+     * Text-only sanitization. Use a dedicated HTML sanitizer for rich HTML.
+     */
+    public static function stripHtml(string $data): string
+    {
+        return trim(strip_tags($data));
     }
 
     /**

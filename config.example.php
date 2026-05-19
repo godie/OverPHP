@@ -7,6 +7,7 @@ return [
         'http://localhost:5173',
     ],
     'route_prefix' => getenv('API_PREFIX') ?: '/api',
+    'app_env' => getenv('APP_ENV') ?: 'production',
     'controller_namespace' => getenv('CONTROLLER_NAMESPACE') ?: 'OverPHP\\Controllers',
     'benchmark' => [
         'enabled' => filter_var(getenv('BENCHMARK_ENABLED') ?: 'false', FILTER_VALIDATE_BOOLEAN),

@@ -106,6 +106,40 @@ final class Database
         return $this->lastError;
     }
 
+    /**
+     * Execute a SELECT query using prepared statements.
+     *
+     * @param array<string|int, mixed> $params
+     * @return array<int, array<string, mixed>>
+     */
+    public function select(string $sql, array $params = []): array
+    {
+        return $this->prepareAndExecute($sql, $params)->fetchAll();
+    }
+
+    /**
+     * Execute a SELECT query and return a single row.
+     *
+     * @param array<string|int, mixed> $params
+     * @return array<string, mixed>|null
+     */
+    public function selectOne(string $sql, array $params = []): ?array
+    {
+        $row = $this->prepareAndExecute($sql, $params)->fetch();
+
+        return $row === false ? null : $row;
+    }
+
+    /**
+     * Execute a mutating SQL statement using prepared statements.
+     *
+     * @param array<string|int, mixed> $params
+     */
+    public function execute(string $sql, array $params = []): int
+    {
+        return $this->prepareAndExecute($sql, $params)->rowCount();
+    }
+
     // ── Internal ─────────────────────────────────────────────────
 
     /**
@@ -124,5 +158,42 @@ final class Database
         }
 
         return null;
+    }
+
+    /**
+     * @param array<string|int, mixed> $params
+     */
+    private function prepareAndExecute(string $sql, array $params): \PDOStatement
+    {
+        $connection = $this->getConnection();
+
+        if ($connection === null) {
+            throw new \RuntimeException($this->lastError ?? 'Database connection is not available.');
+        }
+
+        $statement = $connection->prepare($sql);
+
+        if ($statement === false) {
+            throw new \RuntimeException('Unable to prepare SQL statement.');
+        }
+
+        foreach ($params as $key => $value) {
+            $parameter = is_int($key) ? $key + 1 : ':' . ltrim((string) $key, ':');
+            $statement->bindValue($parameter, $value, $this->pdoType($value));
+        }
+
+        $statement->execute();
+
+        return $statement;
+    }
+
+    private function pdoType(mixed $value): int
+    {
+        return match (true) {
+            is_int($value) => \PDO::PARAM_INT,
+            is_bool($value) => \PDO::PARAM_BOOL,
+            $value === null => \PDO::PARAM_NULL,
+            default => \PDO::PARAM_STR,
+        };
     }
 }

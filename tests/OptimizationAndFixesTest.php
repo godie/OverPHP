@@ -129,8 +129,9 @@ final class OptimizationAndFixesTest extends TestCase
         $router->run();
         $output = ob_get_clean();
 
-        // Should return fallback index instead of secret content
-        $this->assertEquals('public content', $output);
+        // Traversal attempts should be rejected explicitly instead of falling back to the SPA index.
+        $this->assertStringContainsString('Forbidden', $output);
+        $this->assertStringNotContainsString('secret content', $output);
 
         // Cleanup
         unlink($publicPath . '/index.html');

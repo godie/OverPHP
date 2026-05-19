@@ -64,7 +64,7 @@ final class RouterSecurityTest extends TestCase
         $output = ob_get_clean();
 
         $this->assertNotEquals('secret data', $output);
-        $this->assertEquals('public index', $output);
+        $this->assertStringContainsString('Forbidden', $output);
     }
 
     public function testBlockedExtensionsReturnForbidden(): void

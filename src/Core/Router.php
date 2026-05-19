@@ -25,7 +25,7 @@ final class Router
         'ttf'  => 'font/ttf',
     ];
 
-    /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, params:array<string>}>}> */
+    /** @var array<string, array{static: array<string, array{handler:mixed, options:array}>, dynamic: array<int, array{path:string, handler:mixed, options:array, params:array<string>, types:array<string,string>}>}> */
     private array $routes = [];
 
     /** @var array<string, string> */
@@ -93,14 +93,17 @@ final class Router
                 'options' => $options,
             ];
         } else {
-            preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $path, $matches);
+            preg_match_all('/\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([^}]+))?\}/', $path, $matches);
             $this->routes[$method]['dynamic'][] = [
                 'path' => $path,
                 'handler' => $handler,
                 'options' => $options,
                 'params' => $matches[1],
+                'types' => $this->routeTypes($options),
             ];
         }
+
+        unset($this->compiledRegex[$method]);
     }
 
     public function run(): void
@@ -154,7 +157,11 @@ final class Router
                 foreach ($route['params'] as $i => $name) {
                     $params[$name] = $matches[$i + 1] ?? '';
                 }
-                $this->handleRoute($route['handler'], $params);
+                try {
+                    $this->handleRoute($route['handler'], $this->castRouteParams($params, $route['types']));
+                } catch (\InvalidArgumentException) {
+                    $this->sendError(404, 'Not Found');
+                }
             }
             return;
         }
@@ -166,9 +173,9 @@ final class Router
     {
         if (Security::isCsrfEnabled() &&
             empty($options['skip_csrf']) &&
-            in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true)) {
+            Security::shouldValidateCsrf($method)) {
 
-            $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_SERVER['HTTP_X_XSRF_TOKEN'] ?? $_POST['_csrf_token'] ?? null;
+            $token = Security::csrfTokenFromRequest();
             if (!Security::validateCsrfToken($token)) {
                 $this->sendError(403, 'Invalid CSRF token');
                 return false;
@@ -218,19 +225,114 @@ final class Router
 
         $patterns = [];
         foreach ($this->routes[$method]['dynamic'] as $index => $route) {
-            $parts = preg_split('/(\{[a-zA-Z0-9_]+\})/', $route['path'], -1, PREG_SPLIT_DELIM_CAPTURE);
-            $pattern = '';
-            foreach ($parts as $part) {
-                if (str_starts_with($part, '{') && str_ends_with($part, '}')) {
-                    $pattern .= '([^/]+)';
-                } else {
-                    $pattern .= preg_quote($part, '#');
-                }
-            }
+            $pattern = $this->compileDynamicRoutePattern($route['path'], (array) ($route['options']['where'] ?? []));
             $patterns[] = $pattern . '(*MARK:' . $index . ')';
         }
 
         return $this->compiledRegex[$method] = '#^(?|' . implode('|', $patterns) . ')$#';
+    }
+
+    /**
+     * @param array<string, string> $constraints
+     */
+    private function compileDynamicRoutePattern(string $path, array $constraints): string
+    {
+        $offset = 0;
+        $pattern = '';
+
+        if (!preg_match_all('/\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([^}]+))?\}/', $path, $matches, PREG_OFFSET_CAPTURE)) {
+            return preg_quote($path, '#');
+        }
+
+        foreach ($matches[0] as $index => $match) {
+            [$placeholder, $position] = $match;
+            $name = $matches[1][$index][0];
+            $inlineConstraint = $matches[2][$index][0] ?? null;
+            $constraint = $inlineConstraint !== '' && $inlineConstraint !== null
+                ? $inlineConstraint
+                : ($constraints[$name] ?? '[^/]+');
+
+            $this->assertSafeRouteConstraint($constraint);
+            $pattern .= preg_quote(substr($path, $offset, $position - $offset), '#');
+            $pattern .= '(' . $constraint . ')';
+            $offset = $position + strlen($placeholder);
+        }
+
+        $pattern .= preg_quote(substr($path, $offset), '#');
+
+        return $pattern;
+    }
+
+    private function assertSafeRouteConstraint(string $constraint): void
+    {
+        if ($constraint === '' || strlen($constraint) > 128) {
+            throw new \InvalidArgumentException('Invalid route constraint.');
+        }
+
+        if (str_contains($constraint, '#') || str_contains($constraint, "\n") || str_contains($constraint, "\0")) {
+            throw new \InvalidArgumentException('Invalid route constraint.');
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     * @return array<string, string>
+     */
+    private function routeTypes(array $options): array
+    {
+        $types = $options['types'] ?? [];
+
+        return is_array($types) ? array_filter($types, 'is_string') : [];
+    }
+
+    /**
+     * @param array<string, string> $params
+     * @param array<string, string> $types
+     * @return array<string, mixed>
+     */
+    private function castRouteParams(array $params, array $types): array
+    {
+        $casted = [];
+
+        foreach ($params as $name => $value) {
+            $type = $types[$name] ?? 'string';
+            $casted[$name] = match ($type) {
+                'int' => $this->castIntParam($name, $value),
+                'uuid' => $this->castUuidParam($name, $value),
+                'slug' => $this->castSlugParam($name, $value),
+                'string' => $value,
+                default => throw new \InvalidArgumentException("Unsupported route parameter type [{$type}]."),
+            };
+        }
+
+        return $casted;
+    }
+
+    private function castIntParam(string $name, string $value): int
+    {
+        if (!preg_match('/^(?:0|[1-9][0-9]*)$/', $value)) {
+            throw new \InvalidArgumentException("Invalid integer route parameter [{$name}].");
+        }
+
+        return (int) $value;
+    }
+
+    private function castUuidParam(string $name, string $value): string
+    {
+        if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i', $value)) {
+            throw new \InvalidArgumentException("Invalid UUID route parameter [{$name}].");
+        }
+
+        return strtolower($value);
+    }
+
+    private function castSlugParam(string $name, string $value): string
+    {
+        if (!preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $value)) {
+            throw new \InvalidArgumentException("Invalid slug route parameter [{$name}].");
+        }
+
+        return $value;
     }
 
     private function serveClient(string $uri): bool
@@ -239,16 +341,13 @@ final class Router
             return false;
         }
 
-        // 🔐 Security: Block hidden files and directories (starting with .)
-        // We allow '.' and '..' for SPA fallback traversal tests to remain consistent with existing framework behavior
-        foreach (explode('/', $uri) as $segment) {
-            if (str_starts_with($segment, '.') && $segment !== '.' && $segment !== '..') {
-                $this->sendError(403, 'Forbidden');
-                return true;
-            }
+        $normalizedUri = $this->normalizeClientUri($uri);
+        if ($normalizedUri === null) {
+            $this->sendError(403, 'Forbidden');
+            return true;
         }
 
-        $filePath = $this->resolvedClientPath . ltrim($uri, '/');
+        $filePath = $this->resolvedClientPath . $normalizedUri;
 
         if (is_dir($filePath)) {
             $filePath = rtrim($filePath, '/') . '/' . $this->clientConfig['fallback_index'];
@@ -269,14 +368,49 @@ final class Router
         return false;
     }
 
+    private function normalizeClientUri(string $uri): ?string
+    {
+        $path = parse_url($uri, PHP_URL_PATH);
+
+        if (!is_string($path)) {
+            return null;
+        }
+
+        $decoded = rawurldecode($path);
+
+        if (str_contains($decoded, "\0")) {
+            return null;
+        }
+
+        $decoded = str_replace('\\', '/', $decoded);
+        $decoded = ltrim($decoded, '/');
+
+        if ($decoded === '') {
+            return $this->clientConfig['fallback_index'];
+        }
+
+        if ($decoded === '..' || str_contains($decoded, '../') || str_contains($decoded, '/..')) {
+            return null;
+        }
+
+        foreach (explode('/', $decoded) as $segment) {
+            if ($segment === '' || $segment === '.' || $segment === '..' || str_starts_with($segment, '.')) {
+                return null;
+            }
+        }
+
+        return $decoded;
+    }
+
     private function serveFile(string $filePath): void
     {
         $fileName = basename($filePath);
         $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
 
-        // 🔐 Security: Block PHP files, sensitive extensions and hidden files
+        // 🔐 Security: only serve known static asset types; block code, backups and dotfiles.
         $blockedExtensions = ['php', 'bak', 'sql', 'log', 'old', 'save'];
-        if (in_array($extension, $blockedExtensions, true) ||
+        if (!array_key_exists($extension, self::MIME_TYPES) ||
+            in_array($extension, $blockedExtensions, true) ||
             str_contains($fileName, '.php.') ||
             str_starts_with($fileName, '.')) {
             $this->sendError(403, 'Forbidden');

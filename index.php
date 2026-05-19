@@ -55,7 +55,10 @@ $container->singleton(Database::class, function () use ($config) {
     return new Database($config);
 });
 
-Benchmark::start((bool) ($config['benchmark']['enabled'] ?? false));
+Benchmark::start(
+    (bool) ($config['benchmark']['enabled'] ?? false),
+    (string) ($config['app_env'] ?? getenv('APP_ENV') ?: 'production')
+);
 Security::sendSecurityHeaders();
 Security::setCsrfEnabled((bool) ($config['security']['csrf_enabled'] ?? false));
 
